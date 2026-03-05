@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(cmd:*)",
+      "Bash(export:*)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" PATH=\"/c/Program Files/Android/Android Studio/jbr/bin:$PATH\" cmd:*)",
+      "Bash(where java:*)",
+      "Read(//c/Program Files/Android/Android Studio/jbr/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(ls:*)",
+      "Bash(\"/c/Program Files/Android/Android Studio/jbr/bin/java.exe\":*)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" \"./gradlew.bat\" assembleDebug:*)"
+    ]
+  }
+}
