@@ -1,4 +1,4 @@
-package com.soerjo.myfirstapp
+package com.soerjo.myndicam
 
 import android.Manifest
 import android.content.Context
@@ -14,6 +14,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -43,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import com.soerjo.myfirstapp.ui.theme.MyFirstAppTheme
+import com.soerjo.myndicam.ui.theme.MyNdiCamTheme
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -130,7 +132,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MyFirstAppTheme {
+            MyNdiCamTheme {
                 CameraScreen(ndiSender, cameraExecutor) { newSourceName ->
                     recreateNDISender(newSourceName)
                 }
@@ -260,20 +262,20 @@ fun detectCameras(cameraProvider: ProcessCameraProvider): List<CameraInfo> {
     for (camInfo in cameraProvider.availableCameraInfos) {
         val lensFacing = camInfo.lensFacing
 
-        when (lensFacing) {
-            null -> {
+        when {
+            lensFacing == null -> {
                 externalCount++
                 val name = "External Camera $externalCount"
                 val selector = CameraSelector.Builder().build()
                 cameraList.add(CameraInfo(name, CameraType.EXTERNAL, selector))
             }
-            CameraSelector.LENS_FACING_BACK -> {
+            lensFacing == CameraSelector.LENS_FACING_BACK -> {
                 val selector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                     .build()
                 cameraList.add(CameraInfo("Back Camera", CameraType.BACK, selector))
             }
-            CameraSelector.LENS_FACING_FRONT -> {
+            lensFacing == CameraSelector.LENS_FACING_FRONT -> {
                 val selector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
                     .build()
@@ -323,10 +325,12 @@ fun CameraScreen(
         val camera = selectedCamera ?: return@LaunchedEffect
         val cameraProvider = cameraProviderFuture.get()
 
-        val targetResolution = Size(1280, 720)
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+            .build()
 
         val preview = Preview.Builder()
-            .setTargetResolution(targetResolution)
+            .setResolutionSelector(resolutionSelector)
             .build()
             .also {
                 it.setSurfaceProvider(previewView?.surfaceProvider)
@@ -335,7 +339,7 @@ fun CameraScreen(
         val imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-            .setTargetResolution(targetResolution)
+            .setResolutionSelector(resolutionSelector)
             .setImageQueueDepth(4)
             .build()
             .also {

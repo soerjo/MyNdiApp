@@ -10,7 +10,18 @@
       "Read(//c/Program Files/**)",
       "Bash(ls:*)",
       "Bash(\"/c/Program Files/Android/Android Studio/jbr/bin/java.exe\":*)",
-      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" \"./gradlew.bat\" assembleDebug:*)"
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" \"./gradlew.bat\" assembleDebug:*)",
+      "Bash(./gradlew.bat assembleDebug:*)",
+      "Bash(mv myfirstapp:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(/tmp/fix_resolution.sed:*)",
+      "Bash(cp:*)",
+      "Bash(sed:*)",
+      "Bash(python3:*)",
+      "Read(//c/Users/ryoha/AndroidStudioProjects/MyNdiApp/**)",
+      "Bash(mv app/src/main/java/com/soerjo/myndicam/MainActivity.kt.tmp app/src/main/java/com/soerjo/myndicam/MainActivity.kt)",
+      "Bash(/tmp/MainActivity_part1.kt:*)",
+      "Bash(./gradlew clean:*)"
     ]
   }
 }

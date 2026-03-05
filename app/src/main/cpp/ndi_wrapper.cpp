@@ -36,8 +36,7 @@ struct NDISender {
 
 extern "C" {
 
-JNIEXPORT jboolean JNICALL
-Java_com_soerjo_myfirstapp_NDIWrapper__1nativeInitialize(JNIEnv* env, jobject thiz) {
+JNIEXPORT jboolean JNICALL Java_com_soerjo_myndicam_NDIWrapper__1nativeInitialize(JNIEnv* env, jobject thiz) {
     if (ndi_initialized && pNDI) {
         LOGD("NDI already initialized");
         return JNI_TRUE;
@@ -62,8 +61,7 @@ Java_com_soerjo_myfirstapp_NDIWrapper__1nativeInitialize(JNIEnv* env, jobject th
     return JNI_TRUE;
 }
 
-JNIEXPORT jlong JNICALL
-Java_com_soerjo_myfirstapp_NDIWrapper__1nativeCreateSender(JNIEnv* env, jobject thiz, jstring source_name) {
+JNIEXPORT jlong JNICALL Java_com_soerjo_myndicam_NDIWrapper__1nativeCreateSender(JNIEnv* env, jobject thiz, jstring source_name) {
     if (!ndi_initialized) {
         LOGE("NDI not initialized");
         return 0;
@@ -99,8 +97,7 @@ Java_com_soerjo_myfirstapp_NDIWrapper__1nativeCreateSender(JNIEnv* env, jobject 
     return reinterpret_cast<jlong>(sender);
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_soerjo_myfirstapp_NDIWrapper__1nativeSendFrame(JNIEnv* env, jobject thiz,
+JNIEXPORT jboolean JNICALL Java_com_soerjo_myndicam_NDIWrapper__1nativeSendFrame(JNIEnv* env, jobject thiz,
                                                         jlong handle,
                                                         jbyteArray data,
                                                         jint width,
@@ -164,8 +161,7 @@ Java_com_soerjo_myfirstapp_NDIWrapper__1nativeSendFrame(JNIEnv* env, jobject thi
     return JNI_TRUE;
 }
 
-JNIEXPORT void JNICALL
-Java_com_soerjo_myfirstapp_NDIWrapper__1nativeDestroySender(JNIEnv* env, jobject thiz, jlong handle) {
+JNIEXPORT void JNICALL Java_com_soerjo_myndicam_NDIWrapper__1nativeDestroySender(JNIEnv* env, jobject thiz, jlong handle) {
     if (handle == 0) {
         return;
     }
@@ -181,8 +177,7 @@ Java_com_soerjo_myfirstapp_NDIWrapper__1nativeDestroySender(JNIEnv* env, jobject
     }
 }
 
-JNIEXPORT void JNICALL
-Java_com_soerjo_myfirstapp_NDIWrapper__1nativeCleanup(JNIEnv* env, jobject thiz) {
+JNIEXPORT void JNICALL Java_com_soerjo_myndicam_NDIWrapper__1nativeCleanup(JNIEnv* env, jobject thiz) {
     if (ndi_initialized && pNDI) {
         pNDI->destroy();
         // Note: NDIlib_v6_load does not have a corresponding unload function

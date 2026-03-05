@@ -1,4 +1,4 @@
-# MyNdiApp - NDI Camera Streamer
+# MyNdiCam - NDI Camera Streamer
 
 An Android application that streams live camera video over NDI (Network Device Interface) to any NDI-compatible receiver on the same network.
 
@@ -44,7 +44,7 @@ This application turns your Android device into an NDI video source, allowing yo
 ```
 app/
 ├── src/main/
-│   ├── java/com/soerjo/myfirstapp/
+│   ├── java/com/soerjo/myndicam/
 │   │   ├── MainActivity.kt              # Main activity with camera & NDI orchestration
 │   │   ├── NDIWrapper.kt                # Kotlin wrapper for NDI native functions
 │   │   └── ui/theme/                    # Compose theme files
@@ -109,8 +109,8 @@ The app requires the following permissions:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/MyFirstApp.git
-cd MyFirstApp
+git clone https://github.com/yourusername/MyNdiCam.git
+cd MyNdiCam
 ```
 
 2. Open the project in Android Studio

@@ -1,4 +1,4 @@
-package com.soerjo.myfirstapp
+package com.soerjo.myndicam
 
 import android.util.Log
 
