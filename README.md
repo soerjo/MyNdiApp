@@ -1,4 +1,4 @@
-# MyFirstApp - NDI Camera Streamer
+# MyNdiApp - NDI Camera Streamer
 
 An Android application that streams live camera video over NDI (Network Device Interface) to any NDI-compatible receiver on the same network.
 
