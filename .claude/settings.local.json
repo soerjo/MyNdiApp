@@ -21,7 +21,12 @@
       "Read(//c/Users/ryoha/AndroidStudioProjects/MyNdiApp/**)",
       "Bash(mv app/src/main/java/com/soerjo/myndicam/MainActivity.kt.tmp app/src/main/java/com/soerjo/myndicam/MainActivity.kt)",
       "Bash(/tmp/MainActivity_part1.kt:*)",
-      "Bash(./gradlew clean:*)"
+      "Bash(./gradlew clean:*)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" PATH=\"$JAVA_HOME/bin:$PATH\" ./gradlew assembleDebug:*)",
+      "Bash(mv:*)",
+      "Bash(/tmp/insert_code.txt:*)",
+      "Bash(/tmp/tally_changes.txt:*)",
+      "Read(//tmp/**)"
     ]
   }
 }

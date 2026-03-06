@@ -8,68 +8,68 @@ import android.util.Log
  * This class provides JNI bindings to the native NDI library (libndi.so).
  * The native library must be present in app/src/main/jniLibs/<abi>/libndi.so
  *
- * CURRENT STATUS: Stub implementation
- * The native libndi.so is present but JNI bindings need to be implemented.
- * This wrapper runs in "stub mode" and will not crash the app.
+ * NDI TALLY SUPPORT:
+ * The wrapper includes infrastructure for NDI tally callbacks. When OBS (or any NDI receiver)
+ * puts the source on air/preview, it sends tally information back to the source.
  *
- * To enable actual NDI streaming, you need to:
- * OPTION 1: Implement the native JNI methods (see ndi_wrapper.cpp template)
- * OPTION 2: Use the official NDI SDK for Android which includes pre-built Java bindings
- * Download from: https://ndi.video/download/
+ * The native implementation polls for tally state changes at 10Hz and calls the registered
+ * callback when the state changes.
  */
 object NDIWrapper {
     private const val TAG = "NDIWrapper"
     private var isInitialized = false
     private var nativeHandle: Long = 0
-    private var libraryLoaded = false
 
     init {
         try {
             // Load our JNI wrapper library
             System.loadLibrary("ndi_wrapper")
-            libraryLoaded = true
             Log.d(TAG, "Successfully loaded libndi_wrapper.so")
         } catch (e: UnsatisfiedLinkError) {
-            libraryLoaded = false
-            Log.w(TAG, "libndi_wrapper.so not found or JNI methods not implemented - running in stub mode", e)
+            Log.e(TAG, "libndi_wrapper.so not found or JNI methods not implemented", e)
         }
     }
+
+    /**
+     * Interface for NDI tally state changes.
+     * Called when OBS or any NDI receiver changes the tally state.
+     *
+     * The native implementation polls for tally state changes at 10Hz and calls
+     * this method when either the preview or program state changes.
+     */
+    interface TallyCallback {
+        /**
+         * Called when tally state changes.
+         * @param isOnPreview true when source is in preview (e.g., OBS preview window)
+         * @param isOnProgram true when source is live/on-air (e.g., OBS program output)
+         */
+        fun onTallyStateChange(isOnPreview: Boolean, isOnProgram: Boolean)
+    }
+
+    /**
+     * Set the tally callback to receive state changes from NDI receivers.
+     * This should be called after creating a sender.
+     *
+     * The native implementation starts a polling thread at 10Hz that monitors
+     * the tally state and calls the registered callback when either state changes.
+     *
+     * @param handle Native handle to the sender
+     * @param callback Object implementing TallyCallback interface
+     */
+    external fun nativeSetTallyCallback(handle: Long, callback: TallyCallback)
 
     /**
      * Initialize the NDI library
      * @return true if successful, false otherwise
      */
-    private fun nativeInitialize(): Boolean {
-        return if (libraryLoaded) {
-            try {
-                // This will call the native JNI method if implemented
-                _nativeInitialize()
-            } catch (e: UnsatisfiedLinkError) {
-                Log.w(TAG, "nativeInitialize() not implemented - stub mode")
-                false
-            }
-        } else {
-            false
-        }
-    }
+    private external fun nativeInitialize(): Boolean
 
     /**
      * Create an NDI sender
      * @param sourceName The name of the NDI source
      * @return Native handle to the sender (0 if failed)
      */
-    private fun nativeCreateSender(sourceName: String): Long {
-        return if (libraryLoaded) {
-            try {
-                _nativeCreateSender(sourceName)
-            } catch (e: UnsatisfiedLinkError) {
-                Log.w(TAG, "nativeCreateSender() not implemented - stub mode")
-                0L
-            }
-        } else {
-            0L
-        }
-    }
+    private external fun nativeCreateSender(sourceName: String): Long
 
     /**
      * Send a video frame via NDI
@@ -80,52 +80,18 @@ object NDIWrapper {
      * @param stride Frame stride
      * @return true if successful, false otherwise
      */
-    private fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean {
-        return if (libraryLoaded) {
-            try {
-                _nativeSendFrame(handle, data, width, height, stride)
-            } catch (e: UnsatisfiedLinkError) {
-                Log.w(TAG, "nativeSendFrame() not implemented - stub mode")
-                false
-            }
-        } else {
-            false
-        }
-    }
+    private external fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean
 
     /**
      * Destroy an NDI sender
      * @param handle Native handle to the sender
      */
-    private fun nativeDestroySender(handle: Long) {
-        if (libraryLoaded) {
-            try {
-                _nativeDestroySender(handle)
-            } catch (e: UnsatisfiedLinkError) {
-                Log.w(TAG, "nativeDestroySender() not implemented - stub mode")
-            }
-        }
-    }
+    private external fun nativeDestroySender(handle: Long)
 
     /**
      * Cleanup NDI resources
      */
-    private fun nativeCleanup() {
-        if (libraryLoaded) {
-            try {
-                _nativeCleanup()
-            } catch (e: UnsatisfiedLinkError) {
-                Log.w(TAG, "nativeCleanup() not implemented - stub mode")
-            }
-        }
-    }
-
-    // External native method declarations (implemented in C/C++ via JNI)
-    private external fun _nativeInitialize(): Boolean
-    private external fun _nativeCreateSender(sourceName: String): Long
-    private external fun _nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean
-    private external fun _nativeDestroySender(handle: Long)
-    private external fun _nativeCleanup()
+    private external fun nativeCleanup()
 
     // Kotlin wrapper methods
     fun initialize(): Boolean {
@@ -134,7 +100,7 @@ object NDIWrapper {
             if (isInitialized) {
                 Log.d(TAG, "NDI initialized successfully")
             } else {
-                Log.w(TAG, "NDI running in stub mode - JNI methods not implemented")
+                Log.w(TAG, "NDI initialization failed")
             }
         }
         return isInitialized
@@ -142,21 +108,21 @@ object NDIWrapper {
 
     fun createSender(sourceName: String): Long {
         if (!isInitialized) {
-            Log.w(TAG, "NDI not initialized - running in stub mode")
+            Log.w(TAG, "NDI not initialized")
         }
         val handle = nativeCreateSender(sourceName)
         if (handle != 0L) {
             nativeHandle = handle
             Log.d(TAG, "NDI sender created: $sourceName (handle: $handle)")
         } else {
-            Log.w(TAG, "NDI sender running in stub mode")
+            Log.e(TAG, "NDI sender creation failed")
         }
         return handle
     }
 
     fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int): Boolean {
         if (nativeHandle == 0L) {
-            // Stub mode - silently skip
+            Log.w(TAG, "No valid sender handle")
             return false
         }
         return nativeSendFrame(nativeHandle, data, width, height, stride)
@@ -176,4 +142,9 @@ object NDIWrapper {
         isInitialized = false
         Log.d(TAG, "NDI cleanup complete")
     }
+
+    /**
+     * Get the current native handle
+     */
+    fun getNativeHandle(): Long = nativeHandle
 }
