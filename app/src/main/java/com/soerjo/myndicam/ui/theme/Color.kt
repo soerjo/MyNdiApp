@@ -1,4 +1,4 @@
-package com.soerjo.myfirstapp.ui.theme
+package com.soerjo.myndicam.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

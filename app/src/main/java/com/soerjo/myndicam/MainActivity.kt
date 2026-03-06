@@ -1,4 +1,4 @@
-package com.soerjo.myfirstapp
+package com.soerjo.myndicam
 
 import android.Manifest
 import android.content.Context
@@ -12,10 +12,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -33,17 +40,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import com.soerjo.myfirstapp.ui.theme.MyFirstAppTheme
+import com.soerjo.myndicam.ui.theme.MyNdiCamTheme
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -113,6 +122,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Hide system bars (status bar and navigation bar) for fullscreen immersive experience
+        hideSystemBars()
 
         val permissionsToRequest = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -130,11 +142,21 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MyFirstAppTheme {
+            MyNdiCamTheme {
                 CameraScreen(ndiSender, cameraExecutor) { newSourceName ->
                     recreateNDISender(newSourceName)
                 }
             }
+        }
+    }
+
+    private fun hideSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController?.let {
+            it.hide(WindowInsetsCompat.Type.systemBars())
+            it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 
@@ -154,8 +176,7 @@ class MainActivity : ComponentActivity() {
                 ndiSender = NDISender(sourceName)
                 Log.d("CameraApp", "NDI sender started successfully: $sourceName")
             } else {
-                Log.w("CameraApp", "NDI native methods not implemented - running in stub mode")
-                ndiSender = NDISender(sourceName)
+                Log.e("CameraApp", "NDI initialization failed")
             }
         } catch (e: Exception) {
             Log.e("CameraApp", "Failed to start NDI: ${e.message}")
@@ -171,16 +192,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-class NDISender(private val sourceName: String) {
+class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
     private var senderHandle: Long = 0
     private var isRunning = false
-    private var lastFrameTime = 0L
-    private var targetFrameIntervalNs = 1_000_000_000L / 30
-    private var droppedFrames = 0
+    private var tallyCallbackRegistered = false
 
-    fun setFrameRate(frameRate: FrameRate) {
-        targetFrameIntervalNs = frameRate.getFrameIntervalNs()
-        Log.d("NDI", "Frame rate set to ${frameRate.fps} FPS")
+    // Tally states - separate preview and program for distinct indicators
+    private var _isOnPreview = mutableStateOf(false)
+    private var _isOnProgram = mutableStateOf(false)
+
+    /** @return Current preview tally state (true when source is in preview) */
+    val isOnPreview: State<Boolean> = _isOnPreview
+
+    /** @return Current program/on-air tally state (true when source is live) */
+    val isOnProgram: State<Boolean> = _isOnProgram
+
+    /** @return Combined tally state (true when on preview OR program) */
+    val isTallyOn: State<Boolean> = derivedStateOf { _isOnPreview.value || _isOnProgram.value }
+
+    // NDIWrapper.TallyCallback implementation
+    // Called from native code via JNI when tally state changes (polled at 10Hz)
+    override fun onTallyStateChange(isOnPreview: Boolean, isOnProgram: Boolean) {
+        _isOnPreview.value = isOnPreview
+        _isOnProgram.value = isOnProgram
+        Log.d("NDI", "Tally state changed - Preview: $isOnPreview, Program (LIVE): $isOnProgram")
     }
 
     init {
@@ -192,14 +227,20 @@ class NDISender(private val sourceName: String) {
             senderHandle = NDIWrapper.createSender(sourceName)
             if (senderHandle != 0L) {
                 isRunning = true
+                // Register this instance as the tally callback with native code
+                try {
+                    NDIWrapper.nativeSetTallyCallback(senderHandle, this)
+                    tallyCallbackRegistered = true
+                    Log.d("NDI", "Tally callback registered")
+                } catch (e: Exception) {
+                    Log.w("NDI", "Failed to register tally callback: ${e.message}")
+                }
                 Log.d("NDI", "NDI Sender initialized: $sourceName")
             } else {
-                isRunning = true
-                Log.w("NDI", "NDI running in stub mode")
+                Log.e("NDI", "Failed to create NDI sender")
             }
         } catch (e: Exception) {
             Log.e("NDI", "NDI initialization failed: ${e.message}")
-            isRunning = true
         }
     }
 
@@ -207,22 +248,8 @@ class NDISender(private val sourceName: String) {
         if (!isRunning) return
 
         try {
-            val currentTime = System.nanoTime()
-            val timeSinceLastFrame = currentTime - lastFrameTime
-
-            if (timeSinceLastFrame < targetFrameIntervalNs) {
-                droppedFrames++
-                if (droppedFrames % 30 == 0) {
-                    Log.d("NDI", "Dropped $droppedFrames frames")
-                }
-                return
-            }
-
-            lastFrameTime = currentTime
-
-            if (senderHandle != 0L) {
-                NDIWrapper.sendFrame(data, width, height, stride)
-            }
+            // Send frame directly without rate limiting - let NDI handle timing
+            NDIWrapper.sendFrame(data, width, height, stride)
         } catch (e: Exception) {
             Log.e("NDI", "Failed to send frame: ${e.message}")
         }
@@ -230,11 +257,15 @@ class NDISender(private val sourceName: String) {
 
     fun release() {
         try {
+            isRunning = false
             if (senderHandle != 0L) {
                 NDIWrapper.destroySender()
                 senderHandle = 0
             }
-            isRunning = false
+            tallyCallbackRegistered = false
+            _isOnPreview.value = false
+            _isOnProgram.value = false
+            Log.d("NDI", "NDI Sender released")
         } catch (e: Exception) {
             Log.e("NDI", "Failed to release NDI: ${e.message}")
         }
@@ -260,20 +291,20 @@ fun detectCameras(cameraProvider: ProcessCameraProvider): List<CameraInfo> {
     for (camInfo in cameraProvider.availableCameraInfos) {
         val lensFacing = camInfo.lensFacing
 
-        when (lensFacing) {
-            null -> {
+        when {
+            lensFacing == null -> {
                 externalCount++
                 val name = "External Camera $externalCount"
                 val selector = CameraSelector.Builder().build()
                 cameraList.add(CameraInfo(name, CameraType.EXTERNAL, selector))
             }
-            CameraSelector.LENS_FACING_BACK -> {
+            lensFacing == CameraSelector.LENS_FACING_BACK -> {
                 val selector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                     .build()
                 cameraList.add(CameraInfo("Back Camera", CameraType.BACK, selector))
             }
-            CameraSelector.LENS_FACING_FRONT -> {
+            lensFacing == CameraSelector.LENS_FACING_FRONT -> {
                 val selector = CameraSelector.Builder()
                     .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
                     .build()
@@ -305,6 +336,39 @@ fun CameraScreen(
     var sourceNameInput by remember { mutableStateOf(MainActivity.getSavedSourceName(context)) }
     var selectedFrameRate by remember { mutableStateOf(MainActivity.getSavedFrameRate(context)) }
 
+    // Actual camera resolution (updated when camera is bound)
+    var actualResolution by remember { mutableStateOf(Size(1280, 720)) }
+
+    // Tally states from NDI - separate preview and program states
+    val isOnPreview by remember { derivedStateOf { ndiSender?.isOnPreview?.value ?: false } }
+    val isOnProgram by remember { derivedStateOf { ndiSender?.isOnProgram?.value ?: false } }
+
+    // Blinking animation for tally dot
+    val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
+    val blinkAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+    // Tally dot behavior:
+    // - isOnProgram (LIVE): Green blinking dot + green border
+    // - isOnPreview only: Yellow blinking dot (no border)
+    // - neither: Hidden dot
+    val dotAlpha = when {
+        isStreaming && isOnProgram -> blinkAlpha  // Green blinking
+        isStreaming && isOnPreview -> blinkAlpha  // Yellow blinking
+        else -> 0f                 // Hidden
+    }
+    val dotColor = when {
+        isStreaming && isOnProgram -> Color(0xFF00FF00)  // Green for LIVE
+        isStreaming && isOnPreview -> Color(0xFFFFFF00)  // Yellow for Preview
+        else -> Color.Transparent
+    }
+
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
 
     LaunchedEffect(Unit) {
@@ -315,7 +379,7 @@ fun CameraScreen(
     }
 
     LaunchedEffect(selectedFrameRate) {
-        ndiSender?.setFrameRate(selectedFrameRate)
+        // Frame rate setting saved for future use
         MainActivity.saveFrameRate(context, selectedFrameRate)
     }
 
@@ -323,10 +387,12 @@ fun CameraScreen(
         val camera = selectedCamera ?: return@LaunchedEffect
         val cameraProvider = cameraProviderFuture.get()
 
-        val targetResolution = Size(1280, 720)
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+            .build()
 
         val preview = Preview.Builder()
-            .setTargetResolution(targetResolution)
+            .setResolutionSelector(resolutionSelector)
             .build()
             .also {
                 it.setSurfaceProvider(previewView?.surfaceProvider)
@@ -335,29 +401,41 @@ fun CameraScreen(
         val imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-            .setTargetResolution(targetResolution)
-            .setImageQueueDepth(4)
+            .setResolutionSelector(resolutionSelector)
+            .setImageQueueDepth(2)
             .build()
             .also {
                 it.setAnalyzer(cameraExecutor) { imageProxy ->
+                    // Update actual resolution from first frame
+                    if (actualResolution.width != imageProxy.width || actualResolution.height != imageProxy.height) {
+                        actualResolution = Size(imageProxy.width, imageProxy.height)
+                        Log.d("CameraApp", "Actual resolution: ${actualResolution.width}x${actualResolution.height}")
+                    }
                     processImageForNDI(imageProxy, ndiSender, isStreaming)
                 }
             }
 
         try {
             cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
+            val cameraInfo = cameraProvider.bindToLifecycle(
                 lifecycleOwner,
                 camera.cameraSelectorFilter,
                 preview,
                 imageAnalysis
             )
+            // Get the actual resolution from the image analysis use case
+            val resolution = imageAnalysis.resolutionInfo?.resolution
+            if (resolution != null) {
+                actualResolution = Size(resolution.width, resolution.height)
+                Log.d("CameraApp", "Camera bound with resolution: ${actualResolution.width}x${actualResolution.height}")
+            }
         } catch (exc: Exception) {
             Log.e("CameraApp", "Use case binding failed: ${exc.message}", exc)
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Camera preview (always full size, never affected by border)
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).apply {
@@ -371,6 +449,16 @@ fun CameraScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Green border overlay (like CSS position:absolute with border)
+        // Border is drawn on top without affecting camera view size
+        if (isStreaming && isOnProgram) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(width = 12.dp, color = Color(0xFF00FF00))
+            )
+        }
 
         // Live indicator (only when streaming)
         if (isStreaming) {
@@ -392,7 +480,7 @@ fun CameraScreen(
             }
         }
 
-        // Status bar (top right)
+        // Status bar (top right) with blinking tally dot
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -401,18 +489,33 @@ fun CameraScreen(
                 .background(Color.Black.copy(alpha = 0.5f))
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    selectedFrameRate.displayName,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                // Tally dot: Green=LIVE, Yellow=Preview, Hidden=Off
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(dotColor.copy(alpha = dotAlpha))
                 )
-                Text(
-                    "720p • 16:9",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 10.sp
-                )
+                if (isOnPreview || isOnProgram) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        selectedFrameRate.displayName,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "${actualResolution.height}p" + " • " + formatAspectRatio(actualResolution.width, actualResolution.height),
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
 
@@ -447,8 +550,8 @@ fun CameraScreen(
         IconButton(
             onClick = { showMenu = true },
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = if (isStreaming) 40.dp else 12.dp, start = 12.dp)
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = 0.5f))
         ) {
@@ -560,7 +663,6 @@ fun CameraScreen(
                             isSelected = selectedFrameRate == frameRate,
                             onClick = {
                                 selectedFrameRate = frameRate
-                                ndiSender?.setFrameRate(frameRate)
                                 MainActivity.saveFrameRate(context, frameRate)
                                 showFrameRateSelector = false
                             }
@@ -799,11 +901,13 @@ private fun processImageForNDI(
         val vData = ByteArray(vSize)
         vBuffer.get(vData)
 
-        val bgraData = yuvToBgra(yData, uData, vData, width, height,
+        // Convert YUV to UYVY (optimized for NDI - 2 bytes per pixel vs 4 for BGRA)
+        val uyvyData = yuvToUyvy(yData, uData, vData, width, height,
             planes[0].rowStride, planes[1].rowStride, planes[2].rowStride,
             planes[1].pixelStride, planes[2].pixelStride)
 
-        ndiSender.sendFrame(bgraData, width, height, width * 4)
+        // Send with stride = width * 2 for UYVY format (2 bytes per pixel)
+        ndiSender.sendFrame(uyvyData, width, height, width * 2)
     } catch (e: Exception) {
         Log.e("CameraApp", "Error processing image for NDI: ${e.message}")
     } finally {
@@ -811,46 +915,66 @@ private fun processImageForNDI(
     }
 }
 
-private fun yuvToBgra(
+/**
+ * Optimized YUV to UYVY conversion for NDI.
+ * UYVY is a packed format (4:2:2) with 2 bytes per pixel: [U0 Y0 V0 Y1] [U2 Y2 V2 Y3] ...
+ * Much faster than BGRA conversion and NDI-native.
+ */
+private fun yuvToUyvy(
     yData: ByteArray, uData: ByteArray, vData: ByteArray,
     width: Int, height: Int,
     yRowStride: Int, uRowStride: Int, vRowStride: Int,
     uPixelStride: Int, vPixelStride: Int
 ): ByteArray {
-    val bgra = ByteArray(width * height * 4)
-    var bgraIndex = 0
+    // UYVY format: 2 bytes per pixel, packed as [U0 Y0 V0 Y1] [U2 Y2 V2 Y3] ...
+    val uyvy = ByteArray(width * height * 2)
+    var uyvyIndex = 0
 
+    // Process 2 pixels at a time (UYVY packs 2 pixels into 4 bytes)
     for (y in 0 until height) {
-        for (x in 0 until width) {
-            val yIndex = y * yRowStride + x
-            val yValue = yData[yIndex].toInt() and 0xFF
+        for (x in 0 until width step 2) {
+            // Get Y values for both pixels
+            val yIndex1 = y * yRowStride + x
+            val yIndex2 = y * yRowStride + (x + 1)
+            val yValue1 = yData[yIndex1].toInt() and 0xFF
+            val yValue2 = if (x + 1 < width) {
+                yData[yIndex2].toInt() and 0xFF
+            } else {
+                yValue1 // Duplicate last pixel for odd width
+            }
 
+            // Get UV values (shared for both pixels in 4:2:2 subsampling)
             val uvY = y / 2
             val uvX = x / 2
             val uIndex = uvY * uRowStride + uvX * uPixelStride
             val vIndex = uvY * vRowStride + uvX * vPixelStride
-
             val uValue = uData[uIndex].toInt() and 0xFF
             val vValue = vData[vIndex].toInt() and 0xFF
 
-            val c = yValue - 16
-            val d = uValue - 128
-            val e = vValue - 128
-
-            var r = (c * 298 + 409 * e + 128) shr 8
-            var g = (c * 298 - 100 * d - 208 * e + 128) shr 8
-            var b = (c * 298 + 516 * d + 128) shr 8
-
-            r = r.coerceIn(0, 255)
-            g = g.coerceIn(0, 255)
-            b = b.coerceIn(0, 255)
-
-            bgra[bgraIndex++] = b.toByte()
-            bgra[bgraIndex++] = g.toByte()
-            bgra[bgraIndex++] = r.toByte()
-            bgra[bgraIndex++] = 0xFF.toByte()
+            // Pack as UYVY: [U Y0 V Y1]
+            uyvy[uyvyIndex++] = uValue.toByte()     // U
+            uyvy[uyvyIndex++] = yValue1.toByte()    // Y0
+            uyvy[uyvyIndex++] = vValue.toByte()     // V
+            uyvy[uyvyIndex++] = yValue2.toByte()    // Y1
         }
     }
 
-    return bgra
+    return uyvy
+}
+
+/**
+ * Format aspect ratio as a simplified string (e.g., "16:9", "4:3")
+ */
+private fun formatAspectRatio(width: Int, height: Int): String {
+    val gcd = gcd(width, height)
+    val aspectWidth = width / gcd
+    val aspectHeight = height / gcd
+    return "$aspectWidth:$aspectHeight"
+}
+
+/**
+ * Calculate greatest common divisor using Euclidean algorithm
+ */
+private fun gcd(a: Int, b: Int): Int {
+    return if (b == 0) a else gcd(b, a % b)
 }

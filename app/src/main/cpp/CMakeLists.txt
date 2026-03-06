@@ -11,8 +11,9 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/Include
 )
 
-# Find the log library
+# Find required libraries
 find_library(log-lib log)
+find_library(dl-lib dl)
 
 # Source files
 set(SOURCES
@@ -31,8 +32,8 @@ add_library(ndi_wrapper SHARED ${SOURCES})
 # Link libraries
 target_link_libraries(ndi_wrapper
     ${log-lib}
+    ${dl-lib}
     android
-    dl  # For dynamic loading
     ndi_prebuilt  # Link to the NDI library
 )
 
