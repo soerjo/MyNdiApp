@@ -1,293 +1,293 @@
-# MyNdiCam - NDI Camera Streamer
+# MyNdiCam - Android NDI Camera Streamer
 
-An Android application that streams live camera video over NDI (Network Device Interface) to any NDI-compatible receiver on the same network.
+<div align="center">
 
 ![Platform](https://img.shields.io/badge/platform-Android-blue)
 ![Language](https://img.shields.io/badge/language-Kotlin-orange)
 ![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-purple)
 ![Native](https://img.shields.io/badge/native-C%2B%2B%20JNI-yellow)
+![Architecture](https://img.shields.io/badge/architecture-Clean%20Architecture-brightgreen)
+![DI](https://img.shields.io/badge/DI-Hilt-orange)
 ![Min SDK](https://img.shields.io/badge/min%20SDK-29-green)
 ![Target SDK](https://img.shields.io/badge/target%20SDK-36-green)
 
+**A professional Android NDI camera streamer built with Clean Architecture and modular design**
+
+[Features](#features) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [Documentation](#documentation)
+
+</div>
+
+---
+
 ## Overview
 
-This application turns your Android device into an NDI video source, allowing you to stream high-quality camera footage to computers running NDI-compatible software such as OBS Studio, vMix, Wirecast, VLC, or NDI Studio Monitor. It uses native NDI libraries through JNI bindings for optimal performance.
+MyNdiCam is a modern Android application that transforms your device into a professional NDI (Network Device Interface) video source. Stream live camera footage to NDI-compatible receivers like OBS Studio, vMix, Wirecast, or NDI Studio Monitor over your local network.
+
+Built with industry-standard practices including Clean Architecture, MVVM, Hilt dependency injection, and Jetpack Compose, this project serves as both a functional NDI streaming tool and a reference implementation for modern Android development.
 
 ## Features
 
-- **Live Camera Streaming** - Stream real-time video from your Android device's camera
-- **Multiple Camera Support** - Switch between front, back, and external cameras
-- **Frame Rate Selection** - Choose between 30 FPS (standard quality) and 60 FPS (smoother motion)
-- **Customizable NDI Source Name** - Set a custom name for your NDI source
-- **Modern UI** - Built with Jetpack Compose for a smooth, responsive experience
-- **720p HD Output** - Streams at 1280x720 resolution in 16:9 aspect ratio
-- **Landscape Orientation** - Optimized for landscape viewing
-- **Settings Persistence** - Saves your preferences (source name, frame rate) between sessions
+### Core Features
+- **Live Camera Streaming** - Real-time video streaming via NDI protocol
+- **Multiple Camera Support** - Front, back, and external USB cameras
+- **Tally Indicators** - Visual feedback for on-air/preview status (green for live, yellow for preview)
+- **Flexible Frame Rates** - 30 FPS (standard) or 60 FPS (smoother motion)
+- **HD Resolution** - 1280x720 (720p) output
+- **Custom Source Names** - Personalize your NDI source name
+
+### Technical Features
+- **Modular Architecture** - NDI functionality in separate reusable module
+- **Clean Architecture** - Separation of concerns with presentation/domain/data layers
+- **StateFlow + ViewModel** - Reactive state management with lifecycle awareness
+- **Hilt DI** - Type-safe dependency injection
+- **Native Optimization** - UYVY format for efficient streaming (2 bytes/pixel vs 4 for BGRA)
+- **JNI Bridge** - Native NDI SDK integration via Processing.NDI v6.3
+- **Material 3 Design** - Modern UI with Jetpack Compose
 
 ## Architecture
-
-### Technology Stack
-
-| Component | Technology |
-|-----------|------------|
-| **UI Framework** | Jetpack Compose with Material 3 |
-| **Camera** | CameraX (camera-core, camera-camera2, camera-lifecycle, camera-view) |
-| **Native Bridge** | JNI (C++) |
-| **NDI Library** | Processing.NDI v6.3 (dynamic loading) |
-| **Build System** | Gradle with Kotlin DSL |
-| **Minimum SDK** | Android 10 (API 29) |
-| **Target SDK** | Android 14 (API 36) |
-| **Supported ABIs** | arm64-v8a, armeabi-v7a |
 
 ### Project Structure
 
 ```
-app/
-├── src/main/
-│   ├── java/com/soerjo/myndicam/
-│   │   ├── MainActivity.kt              # Main activity with camera & NDI orchestration
-│   │   ├── NDIWrapper.kt                # Kotlin wrapper for NDI native functions
-│   │   └── ui/theme/                    # Compose theme files
-│   ├── cpp/
-│   │   ├── Include/                     # NDI SDK headers
-│   │   │   └── Processing.NDI.*.h      # NDI library include files
-│   │   ├── CMakeLists.txt               # Native build configuration
-│   │   └── ndi_wrapper.cpp              # JNI implementation for NDI
-│   ├── jniLibs/
-│   │   ├── arm64-v8a/libndi.so         # NDI native library (64-bit)
-│   │   └── armeabi-v7a/libndi.so       # NDI native library (32-bit)
-│   └── res/                             # Android resources
-├── build.gradle.kts                     # App-level Gradle config
-└── proguard-rules.pro                   # ProGuard configuration
+MyNdiCam/
+├── app/                           # Main application module
+│   ├── presentation/             # UI layer (Compose + ViewModels)
+│   │   ├── MainActivity.kt
+│   │   └── screen/camera/
+│   │       ├── CameraScreen.kt
+│   │       ├── CameraViewModel.kt
+│   │       └── components/
+│   ├── domain/                    # Business logic layer
+│   │   ├── model/                # Domain models
+│   │   ├── repository/           # Repository interfaces
+│   │   └── usecase/              # Use cases
+│   ├── data/                      # Data layer
+│   │   ├── repository/           # Repository implementations
+│   │   └── datasource/           # Data sources
+│   └── core/                      # Core utilities
+│       ├── di/                   # Hilt modules
+│       ├── util/                 # Extension functions
+│       └── common/               # Constants
+│
+└── ndi/                           # NDI library module (standalone)
+    ├── model/                     # NDI domain models
+    │   └── TallyState.kt
+    ├── internal/                  # Internal implementation
+    │   └── NDIWrapper.kt         # JNI bindings
+    ├── NDIManager.kt             # Public API - lifecycle
+    ├── NDISender.kt              # Public API - sender
+    └── cpp/                       # Native C++ code
+        ├── ndi_wrapper.cpp
+        ├── Include/
+        └── CMakeLists.txt
 ```
 
-### Key Components
+### Technology Stack
 
-#### MainActivity.kt
-- Main entry point for the application
-- Handles runtime permission requests (Camera, WiFi, Network)
-- Manages camera lifecycle using CameraX
-- Contains the `NDISender` class for frame transmission
-- Implements Jetpack Compose UI with camera preview
-- Handles user preferences via SharedPreferences
+| Layer | Technology |
+|-------|------------|
+| **UI** | Jetpack Compose, Material 3 |
+| **Architecture** | Clean Architecture, MVVM |
+| **DI** | Hilt |
+| **Async** | Coroutines, StateFlow |
+| **Camera** | CameraX (1.3.4) |
+| **NDI** | Processing.NDI v6.3 (JNI) |
+| **Native** | C++17, CMake |
+| **Build** | Gradle (Kotlin DSL) |
 
-#### NDIWrapper.kt
-- Kotlin singleton object providing JNI bindings
-- Loads native `ndi_wrapper` library
-- Provides safe API with stub mode fallback
-- Methods: `initialize()`, `createSender()`, `sendFrame()`, `destroySender()`, `cleanup()`
+### Data Flow
 
-#### ndi_wrapper.cpp
-- Native C++ implementation using JNI
-- Dynamically loads NDI library using `Processing.NDI.DynamicLoad.h`
-- Implements all native methods declared in NDIWrapper
-- Converts Java byte arrays to NDI video frames (BGRA format)
-- Uses async API for better performance
-
-## Permissions
-
-The app requires the following permissions:
-
-| Permission | Purpose |
-|------------|---------|
-| `CAMERA` | Access device camera for video capture |
-| `ACCESS_WIFI_STATE` | Check WiFi connectivity status |
-| `INTERNET` | Required for NDI network streaming |
-| `ACCESS_NETWORK_STATE` | Monitor network connectivity |
-| `CHANGE_WIFI_MULTICAST_STATE` | Enable NDI discovery on local network |
+```
+Camera → CameraX → YUV_420_888 → UYVY Conversion → NDI Sender → Network
+                                      ↓
+                                  NDI Tally (10Hz polling)
+                                      ↓
+                                  StateFlow → UI Updates
+```
 
 ## Installation
 
 ### Prerequisites
 
-1. Android Studio Hedgehog (2023.1.1) or later
-2. Android SDK 36
-3. NDK r21 or later (included with Android Studio)
-4. CMake 3.18.1 or later
+- Android Studio Hedgehog (2023.1.1) or later
+- Android SDK 36
+- NDK r21 or later
+- CMake 3.18.1 or later
+- Android device with:
+  - Android 10 (API 29) or higher
+  - Camera support
+  - WiFi connectivity
 
-### Building from Source
+### NDI SDK Setup
 
-1. Clone the repository:
+The NDI SDK is **not included** in the repository due to licensing. You must manually add it:
+
+1. Download NDI SDK from [ndi.video](https://ndi.video/download/)
+2. Extract the downloaded file
+3. Copy `libndi.so` to:
+   ```
+   ndi/src/main/jniLibs/arm64-v8a/libndi.so
+   ndi/src/main/jniLibs/armeabi-v7a/libndi.so
+   ```
+
+### Building
+
 ```bash
+# Clone the repository
 git clone https://github.com/yourusername/MyNdiCam.git
 cd MyNdiCam
-```
 
-2. Open the project in Android Studio
+# Open in Android Studio and sync
+# Build debug APK
+./gradlew assembleDebug
 
-3. Sync Gradle files:
-```
-File > Sync Project with Gradle Files
-```
-
-4. Connect an Android device or start an emulator
-
-5. Build and run:
-```
-Run > Run 'app'
+# Install to connected device
+./gradlew installDebug
 ```
 
 ## Usage
 
-### Basic Usage
+### Quick Start
 
-1. **Grant Permissions** - Allow camera and network permissions when prompted
-2. **Select Camera** - Tap the menu button (⋮) to choose between front/back/external cameras
-3. **Start Streaming** - Tap the play button to begin NDI streaming
-4. **Stop Streaming** - Tap the stop button to end the stream
+1. **Launch the app** - Grant camera and network permissions
+2. **Select camera** - Tap menu (⋮) → choose camera
+3. **Start streaming** - Tap the play button
+4. **Connect receiver** - Open NDI-compatible software on same network
 
-### Receiving NDI Stream
+### Receiving the Stream
 
-To receive the NDI stream on your computer:
+#### Using NDI Studio Monitor (Free)
+1. Download from [ndi.video](https://ndi.video/tools/)
+2. Install and run
+3. Your camera source appears automatically
 
-#### Option 1: NDI Studio Monitor (Free)
-1. Download from: https://ndi.video/tools/
-2. Install and run NDI Studio Monitor
-3. Your Android camera source should appear in the source list
-4. Both devices must be on the same network
+#### Using OBS Studio
+1. Install [OBS Studio](https://obsproject.com/)
+2. Install [NDI Plugin](https://github.com/Palakis/obs-ndi)
+3. Add NDI Source → Select your camera
 
-#### Option 2: OBS Studio with NDI Plugin
-1. Install OBS Studio
-2. Install the NDI plugin for OBS
-3. Add NDI Source and select your Android camera
-
-#### Option 3: Other NDI-Compatible Software
-- VLC with NDI plugin
+#### Other Options
 - vMix
 - Wirecast
-- Any software supporting NDI sources
+- VLC with NDI plugin
+- Any NDI-compatible software
 
 ### Settings
 
-#### Change Frame Rate
-1. Tap the menu button (⋮)
-2. Select "Frame Rate"
-3. Choose between 30 FPS (standard) or 60 FPS (smoother)
+| Setting | Options | Location |
+|---------|---------|----------|
+| Camera | Front/Back/External | Menu (⋮) → Current Camera |
+| Frame Rate | 30/60 FPS | Menu (⋮) → Frame Rate |
+| Source Name | Custom text | Menu (⋮) → Source Name |
 
-#### Change NDI Source Name
-1. Tap the menu button (⋮)
-2. Select "Source Name"
-3. Enter your desired source name
-4. Tap "Save" to apply
+### Tally Indicators
 
-#### Select Camera
-1. Tap the menu button (⋮)
-2. The current camera is shown at the top
-3. Tap to select a different camera (Front/Back/External)
+- **🟢 Green Blinking + Green Border** - On-air (live program)
+- **🟡 Yellow Blinking** - In preview
+- **No indicator** - Not connected
+
+## Documentation
+
+- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed architecture documentation
+- [NDI Module API](docs/API.md) - NDI library API reference
+- [Development Guide](docs/DEVELOPMENT.md) - Contributing and development setup
+- [Modularization Summary](MODULARIZATION_SUMMARY.md) - Module architecture details
+- [Restructuring Summary](RESTRUCTURING_SUMMARY.md) - Clean architecture details
 
 ## Network Requirements
 
-- Both Android device and receiver must be on the **same local network**
-- For best performance, use **5GHz WiFi** or wired Ethernet
-- Some networks may block multicast/broadcast traffic
-- Firewall may need to allow NDI traffic (default port: 5961)
+- Both devices on **same local network**
+- **5GHz WiFi** recommended for best performance
+- Some routers may block multicast traffic
+- Default NDI port: 5961
+- Minimum bandwidth: ~15 Mbps for 720p60
+
+## Permissions
+
+| Permission | Purpose |
+|------------|---------|
+| `CAMERA` | Video capture |
+| `ACCESS_WIFI_STATE` | Check connectivity |
+| `INTERNET` | NDI streaming |
+| `ACCESS_NETWORK_STATE` | Monitor network |
+| `CHANGE_WIFI_MULTICAST_STATE` | NDI discovery |
 
 ## Troubleshooting
 
-### NDI source not appearing on receiver
-
-**Possible causes:**
-- Devices are on different networks
-- Firewall blocking NDI traffic
-- Multicast disabled on router
+### Source not appearing on receiver
 
 **Solutions:**
-- Ensure both devices are on the same WiFi network
-- Disable firewall temporarily to test
-- Try using a mobile hotspot on the Android device
+- Verify same network (check IP addresses)
+- Disable firewall temporarily
+- Try mobile hotspot on Android device
+- Check router allows multicast traffic
+
+### Poor quality or lag
+
+**Solutions:**
+- Use 5GHz WiFi
+- Reduce frame rate to 30 FPS
+- Move closer to router
+- Close other bandwidth-heavy apps
 
 ### App crashes on startup
 
-**Possible causes:**
-- Missing NDI native libraries
-- Incompatible device architecture
-
 **Solutions:**
-- Ensure `jniLibs` folder contains libndi.so for your device's ABI
-- Check logcat for specific error messages
+- Verify NDI SDK installed correctly
+- Check device ABI compatibility
+- Review logcat for errors
 
-### Poor video quality or lag
+## Contributing
 
-**Possible causes:**
-- Weak WiFi signal
-- Network congestion
-- High frame rate on slower device
-
-**Solutions:**
-- Move closer to WiFi router
-- Switch to 5GHz WiFi
-- Reduce frame rate to 30 FPS
-- Close other apps using bandwidth
-
-### Camera preview shows but streaming doesn't work
-
-**Possible causes:**
-- NDI library not loaded correctly
-- Stub mode active (JNI methods not implemented)
-
-**Solutions:**
-- Check logcat for "stub mode" warnings
-- Verify native library compilation succeeded
-- Ensure NDI initialization completed successfully
-
-## Configuration
-
-### Build Variants
-
-```gradle
-buildTypes {
-    release {
-        isMinifyEnabled = false
-        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-    }
-}
-```
-
-### Native Build Configuration
-
-```cmake
-cmake_minimum_required(VERSION 3.18.1)
-project("ndi_wrapper")
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Include)
-```
+We welcome contributions! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for guidelines.
 
 ## Development
 
-### Adding Features
+### Project Status
 
-The project is structured to allow easy extension:
+- [x] Clean Architecture implementation
+- [x] Modular design with NDI library
+- [x] MVVM with ViewModel + StateFlow
+- [x] Hilt dependency injection
+- [x] Tally support
+- [x] Multiple camera support
+- [x] Material 3 UI
 
-- **New frame rates**: Add to `FrameRate` enum in MainActivity.kt
-- **Additional resolutions**: Modify `targetResolution` in CameraScreen composable
-- **Custom video formats**: Update `yuvToBgra()` conversion function
+### Roadmap
 
-### Code Style
-
-The project follows Kotlin and Android coding conventions:
-- Kotlin code style: https://kotlinlang.org/docs/coding-conventions.html
-- Android code style: https://developer.android.com/kotlin/style-guide
+- [ ] Audio streaming support
+- [ ] Adjustable resolution
+- [ ] NDI discovery UI
+- [ ] Multiple concurrent streams
+- [ ] NDI receiver functionality
+- [ ] Unit tests
+- [ ] Instrumentation tests
 
 ## License
 
-This project uses the NDI SDK which is subject to NewTek's license terms. Please refer to the NDI SDK license agreement for usage restrictions.
+This project uses the NDI SDK which is subject to NewTek's license terms. Please refer to the [NDI SDK license agreement](https://ndi.video/assets/downloads/sdk-license/NDI_SDK_license_agreement_2021-09-06.pdf) for usage restrictions.
 
 ## Credits
 
-- **NDI by NewTek** - Network Device Interface technology
-- **CameraX by Google** - Modern camera API for Android
-- **Jetpack Compose** - Modern UI toolkit for Android
+- **NDI** by NewTek - Network Device Interface technology
+- **CameraX** by Google - Modern camera API
+- **Jetpack Compose** - Modern UI toolkit
+- **Hilt** - Dependency injection for Android
 
 ## References
 
 - [NDI Documentation](https://ndi.video/tools/)
 - [CameraX Documentation](https://developer.android.com/training/camerax)
-- [Jetpack Compose Documentation](https://developer.android.com/jetpack/compose)
+- [Jetpack Compose](https://developer.android.com/jetpack/compose)
+- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [NDI SDK Download](https://ndi.video/download/)
 
 ---
 
-**Note:** This application is provided as-is for educational and personal use. The NDI SDK requires a separate license agreement with NewTek for commercial use.
+<div align="center">
+
+**Note:** This application is provided as-is for educational and personal use. Commercial use requires proper NDI SDK licensing from NewTek.
+
+Made with ❤️ using Android and NDI
+
+</div>
