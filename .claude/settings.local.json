@@ -33,7 +33,8 @@
       "Bash(adb logcat:*)",
       "Bash(unzip:*)",
       "Bash(./gradlew :ndi:compileDebugKotlin:*)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(rm:*)"
     ]
   }
 }

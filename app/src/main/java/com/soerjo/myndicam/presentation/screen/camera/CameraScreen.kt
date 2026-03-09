@@ -42,13 +42,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.soerjo.myndicam.core.common.Constants
 import com.soerjo.myndicam.core.util.convertYuvToUyvy
+import com.soerjo.myndicam.core.util.convertYuvToUyvyCropped
 import com.soerjo.myndicam.core.util.formatAspectRatio
 import com.soerjo.myndicam.domain.model.FrameRate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.soerjo.myndicam.presentation.screen.camera.components.*
-
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 /**
  * Main Camera Screen composable
  */
@@ -105,7 +106,13 @@ fun CameraScreen(
             .setResolutionStrategy(
                 ResolutionStrategy(
                     Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
-                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                )
+            )
+            .setAspectRatioStrategy(
+                AspectRatioStrategy(
+                    AspectRatio.RATIO_16_9,
+                    AspectRatioStrategy.FALLBACK_RULE_AUTO
                 )
             )
             .build()
@@ -150,11 +157,11 @@ fun CameraScreen(
 
     // Main UI
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview
+        // Camera preview (center crop to match NDI output)
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FIT_CENTER
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
