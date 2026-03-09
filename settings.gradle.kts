@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MyNdiCam"
 include(":app")
+include(":ndi")

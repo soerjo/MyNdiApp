@@ -26,7 +26,16 @@
       "Bash(mv:*)",
       "Bash(/tmp/insert_code.txt:*)",
       "Bash(/tmp/tally_changes.txt:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(adb devices:*)",
+      "Bash(adb install:*)",
+      "Bash(adb shell:*)",
+      "Bash(adb logcat:*)",
+      "Bash(unzip:*)",
+      "Bash(./gradlew :ndi:compileDebugKotlin:*)",
+      "Bash(./gradlew:*)",
+      "Bash(rm:*)",
+      "WebSearch"
     ]
   }
 }
