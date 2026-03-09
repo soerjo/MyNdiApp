@@ -34,7 +34,8 @@
       "Bash(unzip:*)",
       "Bash(./gradlew :ndi:compileDebugKotlin:*)",
       "Bash(./gradlew:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebSearch"
     ]
   }
 }

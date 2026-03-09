@@ -128,13 +128,14 @@ fun CameraScreen(
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .setResolutionSelector(resolutionSelector)
-            .setImageQueueDepth(2)
+            .setImageQueueDepth(1)  // Lower latency with queue depth of 1
             .build()
             .also {
                 it.setAnalyzer(Dispatchers.Default.asExecutor()) { imageProxy ->
                     // Update actual resolution from first frame
                     viewModel.updateActualResolution(imageProxy.width, imageProxy.height)
-                    processImageForNDI(imageProxy, viewModel)
+                    // Pass streaming state directly to avoid StateFlow access per frame
+                    processImageForNDI(imageProxy, viewModel, uiState.isStreaming)
                 }
             }
 
@@ -351,12 +352,14 @@ fun CameraScreen(
 
 /**
  * Process image and send to NDI
+ * Note: isStreaming is passed directly to avoid StateFlow access per frame
  */
 private fun processImageForNDI(
     imageProxy: ImageProxy,
-    viewModel: CameraViewModel
+    viewModel: CameraViewModel,
+    isStreaming: Boolean
 ) {
-    if (!viewModel.uiState.value.isStreaming) {
+    if (!isStreaming) {
         imageProxy.close()
         return
     }

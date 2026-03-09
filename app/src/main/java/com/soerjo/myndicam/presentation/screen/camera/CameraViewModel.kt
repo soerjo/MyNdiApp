@@ -58,6 +58,10 @@ class CameraViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
 
+    // Cached streaming state for fast per-frame access (avoids StateFlow read barrier)
+    @Volatile
+    private var isStreaming = false
+
     private var ndiSender: NDISender? = null
 
     init {
@@ -148,8 +152,9 @@ class CameraViewModel @Inject constructor(
      * Toggle streaming state
      */
     fun toggleStreaming() {
-        _uiState.value = _uiState.value.copy(isStreaming = !_uiState.value.isStreaming)
-        Log.d(TAG, "NDI Streaming: ${if (_uiState.value.isStreaming) "ON" else "OFF"}")
+        isStreaming = !isStreaming
+        _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
+        Log.d(TAG, "NDI Streaming: ${if (isStreaming) "ON" else "OFF"}")
     }
 
     /**
@@ -165,9 +170,11 @@ class CameraViewModel @Inject constructor(
 
     /**
      * Send a video frame via NDI
+     * Note: This is called on every frame, so uses cached isStreaming for performance
      */
     fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int) {
-        if (!_uiState.value.isStreaming) return
+        // Fast path: use cached volatile state to avoid StateFlow read barrier
+        if (!isStreaming) return
 
         try {
             ndiSender?.sendFrame(data, width, height, stride)
