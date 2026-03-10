@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USB Device Filter for UVC Cameras -->
+    <!-- Video Class (0x0E) -->
+    <usb-device class="14" />
+
+    <!-- Video Interface Class (0x0E) -->
+    <usb-device interface-class="14" />
+
+    <!-- Miscellaneous Class (0xEF) with Video Interface (common for webcams) -->
+    <usb-device class="239" subclass="2" protocol="1" />
+
+    <!-- MACROSILICON USB Capture Cards (vendor 21325, product 8457) -->
+    <usb-device vendor-id="21325" product-id="8457" />
+</resources>

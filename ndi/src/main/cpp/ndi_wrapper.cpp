@@ -21,6 +21,7 @@ struct NDISender;
 // Global NDI instance (using dynamic loading)
 static const NDIlib_v6_3* pNDI = nullptr;
 static bool ndi_initialized = false;
+static void* hNDI = nullptr;  // Handle for dynamic NDI library loading
 
 // Tally callback infrastructure
 static JavaVM* g_jvm = nullptr;
@@ -233,10 +234,27 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeInitial
         return JNI_FALSE;
     }
 
-    // Load the NDI library dynamically
+    // Explicitly load the NDI library first
+    hNDI = dlopen("libndi.so", RTLD_NOW | RTLD_LOCAL);
+    if (!hNDI) {
+        LOGE("Failed to load NDI library: %s", dlerror());
+        return JNI_FALSE;
+    }
+
+    // Load the NDI functions dynamically
+    auto NDIlib_v6_load = (NDIlib_v6_3*(*)())dlsym(hNDI, "NDIlib_v6_load");
+    if (!NDIlib_v6_load) {
+        LOGE("Failed to find NDIlib_v6_load symbol: %s", dlerror());
+        dlclose(hNDI);
+        hNDI = nullptr;
+        return JNI_FALSE;
+    }
+
     pNDI = NDIlib_v6_load();
     if (!pNDI) {
-        LOGE("Failed to load NDI library");
+        LOGE("Failed to load NDI library via NDIlib_v6_load");
+        dlclose(hNDI);
+        hNDI = nullptr;
         return JNI_FALSE;
     }
 
@@ -413,11 +431,16 @@ JNIEXPORT void JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeCleanup(JNI
 
     if (ndi_initialized && pNDI) {
         pNDI->destroy();
-        // Note: NDIlib_v6_load does not have a corresponding unload function
-        // The library will be unloaded when the process exits
         pNDI = nullptr;
         ndi_initialized = false;
         LOGD("NDI cleanup complete");
+    }
+
+    // Unload the NDI library if it was loaded
+    if (hNDI) {
+        dlclose(hNDI);
+        hNDI = nullptr;
+        LOGD("NDI library unloaded");
     }
 }
 

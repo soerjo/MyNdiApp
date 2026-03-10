@@ -4,6 +4,13 @@ package com.soerjo.myndicam.core.common
  * App constants
  */
 object Constants {
+    // Screen mode - change this to switch screens:
+    // 0 = Black screen only (Jetpack Compose)
+    // 1 = New UI (Jetpack Compose with all UI elements)
+    // 2 = USB camera preview (from UsbCameraScreen)
+    // 3 = USB camera preview (from UsbCameraFragment)
+    const val SCREEN_MODE = 2
+
     // Camera settings
 //    const val TARGET_WIDTH = 1280
 //    const val TARGET_HEIGHT = 720

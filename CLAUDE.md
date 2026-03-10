@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MyNdiCam (package: `com.soerjo.myndicam`) - Android NDI Camera Streamer that sends live camera video over NDI to receivers like OBS Studio, vMix, etc.
+MyNdiCam (package: `com.soerjo.myndicam`) - Android NDI Camera Streamer that sends live camera video over NDI to receivers like OBS Studio, vMix, etc. Supports both CameraX (built-in cameras) and USB UVC cameras.
 
 ## Build Commands
 
@@ -24,24 +24,29 @@ MyNdiCam (package: `com.soerjo.myndicam`) - Android NDI Camera Streamer that sen
 # Build specific module (useful for iterative development)
 ./gradlew :app:assembleDebug
 ./gradlew :ndi:assembleDebug
+./gradlew :libuvc:assembleDebug
 ```
 
 ## Architecture
 
 ### Module Structure
 
-The project is organized into **two modules**:
+The project is organized into **four active modules**:
 
 1. **`app`** - Main application (camera + UI)
 2. **`ndi`** - Standalone NDI library module (reusable across projects)
+3. **`libuvc`** - Native JNI library for USB UVC camera communication (ndk-build)
+4. **`libnative`** - Native library with YUV utilities (CMake)
+5. **`libausbc`** - Android USB Camera library (Kotlin wrapper around libuvc)
 
 ### Technology Stack
 - **UI**: Jetpack Compose with Material 3
 - **Architecture**: Clean Architecture (presentation/domain/data layers)
-- **DI**: Hilt (dagger.hilt.android)
-- **Camera**: CameraX (camera-core, camera-camera2, camera-lifecycle, camera-view)
+- **DI**: Hilt with KSP annotation processing
+- **Camera**: CameraX (built-in cameras) + libausbc (USB UVC cameras)
 - **Native**: C++ JNI with NDI SDK (Processing.NDI v6.3 via dynamic loading)
 - **Build**: Gradle with Kotlin DSL, CMake for native code
+- **Java**: 11
 
 ### App Module Structure (Clean Architecture)
 
@@ -57,7 +62,7 @@ app/src/main/java/com/soerjo/myndicam/
 │   └── theme/                      # Compose theme files
 ├── domain/                          # Business logic layer
 │   ├── model/                      # Domain models (pure data classes)
-│   │   ├── CameraInfo.kt
+│   │   ├── CameraInfo.kt           # Sealed class for CameraX and USB cameras
 │   │   ├── CameraType.kt
 │   │   └── FrameRate.kt
 │   ├── repository/                 # Repository interfaces
@@ -71,13 +76,17 @@ app/src/main/java/com/soerjo/myndicam/
 │   ├── repository/                 # Repository implementations
 │   │   ├── CameraRepositoryImpl.kt
 │   │   └── SettingsRepositoryImpl.kt
-│   └── datasource/
-│       └── CameraDataSource.kt     # CameraX operations
+│   ├── datasource/
+│   │   ├── CameraDataSource.kt     # CameraX operations
+│   │   └── UsbCameraDataSource.kt  # USB camera detection via USBMonitor
+│   └── camera/
+│       └── UsbCameraController.kt  # USB camera lifecycle & frame capture
 ├── core/                            # Core utilities
 │   ├── di/
 │   │   └── AppModule.kt            # Hilt DI module
 │   ├── util/                       # Extension functions
-│   │   ├── ImageFormatExtensions.kt
+│   │   ├── ImageFormatExtensions.kt # CameraX format conversions
+│   │   ├── UsbImageFormatExtensions.kt # USB camera format conversions
 │   │   └── MathExtensions.kt
 │   └── common/
 │       └── Constants.kt            # App constants
@@ -104,6 +113,27 @@ ndi/src/main/
     └── armeabi-v7a/libndi.so       # NDI native library (NOT in repo - manual setup)
 ```
 
+### USB Camera Modules Structure
+
+```
+libuvc/
+├── src/main/jni/                   # Native JNI implementation (ndk-build)
+│   ├── UVCCamera.cpp/h            # UVC camera implementation
+│   ├── UVCPreview.cpp/h           # Preview handling
+│   └── libjpeg-turbo-1.5.0/       # JPEG codec
+└── jniLibs/                        # Pre-built native libraries
+    ├── arm64-v8a/libUVCCamera.so
+    ├── armeabi-v7a/libUVCCamera.so
+    └── ...
+
+libausbc/
+└── src/main/java/com/jiangdg/ausbc/
+    ├── MultiCameraClient.kt        # Multi-camera management
+    ├── camera/CameraUVC.kt         # UVC camera implementation
+    ├── base/CameraFragment.kt      # Base fragment for camera operations
+    └── utils/                      # Utilities
+```
+
 ### Key Architecture Patterns
 
 **MVVM with Hilt DI:**
@@ -115,6 +145,25 @@ ndi/src/main/
 - `@HiltAndroidApp` on `MyNdiApp.kt` enables Hilt
 - `AppModule` binds repository interfaces to implementations
 - `@HiltViewModel` injects use cases into ViewModels
+- Uses **KSP** (not kapt) for annotation processing
+
+**CameraInfo Sealed Class:**
+```kotlin
+sealed class CameraInfo {
+    data class CameraX(
+        override val name: String,
+        override val type: CameraType,
+        val cameraSelector: CameraSelector
+    ) : CameraInfo()
+
+    data class Usb(
+        val deviceId: Int,
+        override val name: String,
+        val vendorId: Int,
+        val productId: Int
+    ) : CameraInfo() { override val type: CameraType = CameraType.EXTERNAL }
+}
+```
 
 **NDI Module API:**
 ```kotlin
@@ -133,11 +182,23 @@ NDIManager.cleanup()
 
 ### Data Flow
 
-**Camera Pipeline:**
+**CameraX Pipeline:**
 ```
-CameraX → YUV_420_888 → convertYuvToUyvy() (core/util/) →
+CameraX → YUV_420_888 → UyvyBufferPool.obtain() → convertYuvToUyvyDirect() →
 NDISender.sendFrame() → NDI async send
 ```
+
+**USB Camera Pipeline:**
+```
+USBMonitor → UsbCameraController → YUYV/NV21 → convertYuyvToUyvy() →
+NDISender.sendFrame() → NDI async send
+```
+
+**Image Processing:**
+- CameraX: YUV_420_888 → UYVY (NDI native format, 2 bytes/pixel)
+- USB Camera: YUYV/NV21 → UYVY (NDI native format, 2 bytes/pixel)
+- Buffer pooling via `UyvyBufferPool` reduces GC pressure
+- Direct ByteBuffer access avoids copying intermediate arrays
 
 **Tally System:**
 ```
@@ -156,10 +217,13 @@ The app implements NDI tally feedback:
 ### Important Constants
 
 - **Min SDK**: 29, **Target SDK**: 36
-- **Resolution**: 1280x720 (720p)
+- **Resolution**: 1920x1080 (1080p)
 - **Frame rates**: 30 FPS (default), 60 FPS
 - **NDI format**: UYVY (2 bytes per pixel, 4:2:2 subsampling)
 - **ABI filters**: arm64-v8a, armeabi-v7a
+- **Java**: 11
+- **NDK**: r21 or later (for NDI module), 27.0.12077973 (for libnative)
+- **CMake**: 3.22.1
 
 ## NDI SDK Setup (Required)
 
@@ -172,6 +236,25 @@ The NDI SDK is NOT included in the repository. You must manually add it:
 
 The native build dynamically loads the NDI library via `Processing.NDI.DynamicLoad.h`.
 
+## USB Camera Support
+
+The app supports USB UVC cameras via the libausbc library:
+
+### USB Camera Detection
+- `UsbCameraDataSource` detects USB cameras via `USBMonitor`
+- USB cameras appear in the camera list with `CameraInfo.Usb` type
+- USB device filter is defined in `app/src/main/res/xml/usb_device_filter.xml`
+
+### USB Camera Preview
+- USB cameras use `UsbCameraController` for lifecycle management
+- Preview frames are captured via `IPreviewDataCallBack`
+- YUYV/NV21 format is converted to UYVY for NDI streaming
+
+### USB Camera Permissions
+- USB host mode permission is required (`android.hardware.usb.host`)
+- USB device attachment intent filter for automatic app launch
+- Permission is requested via `USBMonitor.requestPermission()`
+
 ## Code Patterns
 
 ### Composable State Management
@@ -181,6 +264,13 @@ The native build dynamically loads the NDI library via `Processing.NDI.DynamicLo
 
 ### Camera Binding
 The camera is rebound when `selectedCamera` or `isStreaming` changes via `LaunchedEffect`.
+- CameraX cameras use `ProcessCameraProvider.bindToLifecycle()`
+- USB cameras use `UsbCameraController.openCamera()`
+
+### Performance Patterns
+1. **Volatile cache**: `CameraViewModel` uses `@Volatile` for cached streaming state to avoid StateFlow read barrier in hot path (sendFrame called every frame)
+2. **Buffer pooling**: `UyvyBufferPool` in `core/util/ImageFormatExtensions.kt` provides buffer pooling to reduce GC pressure from per-frame allocations
+3. **Direct ByteBuffer access**: `convertYuvToUyvyDirect()` reads directly from Image.Plane ByteBuffers to avoid intermediate array copies
 
 ### Native Lifecycle
 Always call `NDIManager.cleanup()` in `Application.onTerminate()` or `Activity.onDestroy()` to properly release native resources and stop the tally polling thread. NDISender instances should be released via `release()` when no longer needed.
@@ -189,5 +279,6 @@ Always call `NDIManager.cleanup()` in `Application.onTerminate()` or `Activity.o
 Settings use SharedPreferences with helper methods in `SettingsRepositoryImpl`.
 
 ### Module Dependencies
-- **app** depends on **ndi** (via `implementation(project(":ndi"))`)
+- **app** depends on **ndi**, **libausbc** (via `implementation(project(":..."))`)
+- **libausbc** depends on **libuvc**, **libnative**
 - **ndi** has NO dependencies on **app** (can be used standalone)
