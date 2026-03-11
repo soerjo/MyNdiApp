@@ -9,8 +9,22 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+
+# Build directories (all levels)
+/build/
+**/build/
+**/.externalNativeBuild/
+**/.cxx/
+
+# Build artifacts
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Native libraries (pre-built or generated)
+**/*.so
+**/*.a
+
+# NDI SDK files (should be added manually)
+!ndi/src/main/jniLibs/libndi.so
