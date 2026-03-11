@@ -1,6 +1,5 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -55,25 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.lifecycleScope
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
 import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.domain.repository.SettingsRepository
 import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
-import com.soerjo.ndi.NDIManager
-import com.soerjo.ndi.NDISender
-import com.soerjo.ndi.model.TallyState
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.launch
-
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-interface CameraScreenEntryPoint {
-    fun settingsRepository(): SettingsRepository
-}
 
 @Composable
 fun CameraScreen() {
@@ -83,282 +68,26 @@ fun CameraScreen() {
 }
 
 @Composable
-fun UsbCameraFragmentScreen() {
+fun UsbCameraScreen(
+    viewModel: CameraViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
-    val activity = context as? androidx.fragment.app.FragmentActivity
-    val fragmentManager = activity?.supportFragmentManager
-    
-    AndroidView(
-        factory = { ctx ->
-            androidx.fragment.app.FragmentContainerView(ctx).apply {
-                id = android.R.id.custom
-            }
-        },
-        modifier = Modifier.fillMaxSize(),
-        update = { fragmentContainer ->
-            fragmentManager?.let { fm ->
-                if (fm.findFragmentById(fragmentContainer.id) == null) {
-                    fm.beginTransaction()
-                        .replace(fragmentContainer.id, UsbCameraFragment())
-                        .commit()
-                }
-            }
-        }
-    )
-}
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-@Composable
-fun NewUIScreen() {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    
-    var isStreaming by remember { mutableStateOf(false) }
-    var sourceName by remember { mutableStateOf("USB Camera") }
-    var tallyState by remember { mutableStateOf(TallyState()) }
-    var currentFps by remember { mutableIntStateOf(0) }
-    var currentHeight by remember { mutableIntStateOf(1080) }
-    
-    var showMenu by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    var sourceNameInput by remember { mutableStateOf(sourceName) }
-    
-    val ndiSender = remember { 
-        try {
-            if (!NDIManager.isInitialized()) {
-                NDIManager.initialize()
-            }
-            NDIManager.createSender(sourceName)
-        } catch (e: Exception) {
-            Log.e("NewUIScreen", "Failed to initialize NDI: ${e.message}")
-            null
-        }
-    }
-    
-    LaunchedEffect(Unit) {
-        ndiSender?.let { sender ->
-            lifecycleOwner.lifecycleScope.launch {
-                sender.tallyState.collect { state ->
-                    tallyState = state
-                }
-            }
-        }
-    }
-    
-    val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
-    val blinkAlpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-    
-    val dotAlpha = when {
-        isStreaming && tallyState.isOnProgram -> blinkAlpha
-        isStreaming && tallyState.isOnPreview -> blinkAlpha
-        else -> 0f
-    }
-    val dotColor = when {
-        isStreaming && tallyState.isOnProgram -> Color(0xFF00FF00)
-        isStreaming && tallyState.isOnPreview -> Color(0xFFFFFF00)
-        else -> Color.Transparent
-    }
-    
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        if (isStreaming && tallyState.isOnProgram) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .border(width = 12.dp, color = Color(0xFF00FF00))
-            )
-        }
-        
-        if (isStreaming) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.Red.copy(alpha = 0.9f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    "LIVE",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-            }
-        }
-        
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(dotColor.copy(alpha = dotAlpha))
-                )
-                if (tallyState.isOnPreview || tallyState.isOnProgram) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "${currentFps}fps",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        if (currentHeight > 0) "${currentHeight}p" else "---",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 10.sp
-                    )
-                }
-            }
-        }
-        
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        ) {
-            FloatingActionButton(
-                onClick = {
-                    isStreaming = !isStreaming
-                    Log.d("NewUIScreen", "Streaming: $isStreaming")
-                },
-                modifier = Modifier.size(72.dp),
-                containerColor = if (isStreaming)
-                    MaterialTheme.colorScheme.error
-                else
-                    MaterialTheme.colorScheme.primary,
-                shape = CircleShape
-            ) {
-                Icon(
-                    imageVector = if (isStreaming) Icons.Filled.Close else Icons.Filled.PlayArrow,
-                    contentDescription = if (isStreaming) "Stop" else "Start",
-                    tint = Color.White,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-        }
-        
-        IconButton(
-            onClick = { showMenu = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.5f))
-        ) {
-            Icon(
-                imageVector = Icons.Filled.MoreVert,
-                contentDescription = "Menu",
-                tint = Color.White
-            )
-        }
-        
-        if (showMenu) {
-            SimpleMenuDialog(
-                sourceName = sourceName,
-                onSettingsClick = {
-                    showMenu = false
-                    showSettings = true
-                    sourceNameInput = sourceName
-                },
-                onDismiss = { showMenu = false }
-            )
-        }
-        
-        if (showSettings) {
-            SimpleSettingsDialog(
-                sourceName = sourceNameInput,
-                onSourceNameChange = { sourceNameInput = it },
-                onSave = {
-                    if (sourceNameInput.isNotBlank()) {
-                        sourceName = sourceNameInput
-                    }
-                    showSettings = false
-                },
-                onDismiss = { showSettings = false }
-            )
-        }
-    }
-}
-
-@Composable
-fun UsbCameraScreen() {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val context = LocalContext.current
-
-    val settingsRepository = remember {
-        val appContext = context.applicationContext
-        val entryPoint = EntryPointAccessors.fromApplication(
-            appContext,
-            CameraScreenEntryPoint::class.java
-        )
-        entryPoint.settingsRepository()
-    }
-
-    var isStreaming by remember { mutableStateOf(false) }
-    var sourceName by remember { mutableStateOf("") }
     var currentWidth by remember { mutableIntStateOf(0) }
     var currentHeight by remember { mutableIntStateOf(0) }
     var currentFps by remember { mutableIntStateOf(0) }
     var frameCount by remember { mutableIntStateOf(0) }
     var lastFpsTime by remember { mutableStateOf(System.currentTimeMillis()) }
 
-    var ndiSender by remember { mutableStateOf<NDISender?>(null) }
-    var tallyState by remember { mutableStateOf(TallyState()) }
-
     var showMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var sourceNameInput by remember { mutableStateOf(sourceName) }
+    var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
 
     var usbFragment by remember { mutableStateOf<UsbCameraFragment?>(null) }
 
-    LaunchedEffect(Unit) {
-        settingsRepository.getSourceName().collect { name ->
-            if (sourceName.isEmpty()) {
-                sourceName = name
-                sourceNameInput = name
-            }
-        }
-    }
-
-    LaunchedEffect(sourceName) {
-        if (sourceName.isNotEmpty()) {
-            try {
-                if (!NDIManager.isInitialized()) {
-                    NDIManager.initialize()
-                }
-                ndiSender?.release()
-                ndiSender = NDIManager.createSender(sourceName)
-
-                ndiSender?.let { sender ->
-                    lifecycleOwner.lifecycleScope.launch {
-                        sender.tallyState.collect { state ->
-                            tallyState = state
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("UsbCameraScreen", "Failed to initialize NDI: ${e.message}")
-            }
-        }
+    LaunchedEffect(uiState.sourceName) {
+        sourceNameInput = uiState.sourceName
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
@@ -373,13 +102,13 @@ fun UsbCameraScreen() {
     )
 
     val dotAlpha = when {
-        isStreaming && tallyState.isOnProgram -> blinkAlpha
-        isStreaming && tallyState.isOnPreview -> blinkAlpha
+        uiState.isStreaming && uiState.tallyState.isOnProgram -> blinkAlpha
+        uiState.isStreaming && uiState.tallyState.isOnPreview -> blinkAlpha
         else -> 0f
     }
     val dotColor = when {
-        isStreaming && tallyState.isOnProgram -> Color(0xFF00FF00)
-        isStreaming && tallyState.isOnPreview -> Color(0xFFFFFF00)
+        uiState.isStreaming && uiState.tallyState.isOnProgram -> Color(0xFF00FF00)
+        uiState.isStreaming && uiState.tallyState.isOnPreview -> Color(0xFFFFFF00)
         else -> Color.Transparent
     }
 
@@ -416,6 +145,7 @@ fun UsbCameraScreen() {
                                     if (width != currentWidth || height != currentHeight) {
                                         currentWidth = width
                                         currentHeight = height
+                                        viewModel.updateActualResolution(width, height)
                                     }
 
                                     frameCount++
@@ -426,10 +156,10 @@ fun UsbCameraScreen() {
                                         lastFpsTime = now
                                     }
 
-                                    if (data != null && isStreaming) {
+                                    if (data != null && uiState.isStreaming) {
                                         try {
                                             val uyvyData = convertToUyvy(data, width, height, format)
-                                            ndiSender?.sendFrame(uyvyData, width, height, width * 2)
+                                            viewModel.sendFrame(uyvyData, width, height, width * 2)
                                         } catch (e: Exception) {
                                             Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
                                         }
@@ -442,7 +172,7 @@ fun UsbCameraScreen() {
             }
         )
 
-        if (isStreaming && tallyState.isOnProgram) {
+        if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -450,7 +180,7 @@ fun UsbCameraScreen() {
             )
         }
 
-        if (isStreaming) {
+        if (uiState.isStreaming) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -487,7 +217,7 @@ fun UsbCameraScreen() {
                         .clip(CircleShape)
                         .background(dotColor.copy(alpha = dotAlpha))
                 )
-                if (tallyState.isOnPreview || tallyState.isOnProgram) {
+                if (uiState.tallyState.isOnPreview || uiState.tallyState.isOnProgram) {
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -512,20 +242,17 @@ fun UsbCameraScreen() {
                 .padding(bottom = 24.dp)
         ) {
             FloatingActionButton(
-                onClick = {
-                    isStreaming = !isStreaming
-                    Log.d("UsbCameraScreen", "Streaming: $isStreaming")
-                },
+                onClick = { viewModel.toggleStreaming() },
                 modifier = Modifier.size(72.dp),
-                containerColor = if (isStreaming)
+                containerColor = if (uiState.isStreaming)
                     MaterialTheme.colorScheme.error
                 else
                     MaterialTheme.colorScheme.primary,
                 shape = CircleShape
             ) {
                 Icon(
-                    imageVector = if (isStreaming) Icons.Filled.Close else Icons.Filled.PlayArrow,
-                    contentDescription = if (isStreaming) "Stop" else "Start",
+                    imageVector = if (uiState.isStreaming) Icons.Filled.Close else Icons.Filled.PlayArrow,
+                    contentDescription = if (uiState.isStreaming) "Stop" else "Start",
                     tint = Color.White,
                     modifier = Modifier.size(36.dp)
                 )
@@ -549,11 +276,11 @@ fun UsbCameraScreen() {
 
         if (showMenu) {
             SimpleMenuDialog(
-                sourceName = sourceName,
+                sourceName = uiState.sourceName,
                 onSettingsClick = {
                     showMenu = false
                     showSettings = true
-                    sourceNameInput = sourceName
+                    sourceNameInput = uiState.sourceName
                 },
                 onDismiss = { showMenu = false }
             )
@@ -565,23 +292,7 @@ fun UsbCameraScreen() {
                 onSourceNameChange = { sourceNameInput = it },
                 onSave = {
                     if (sourceNameInput.isNotBlank()) {
-                        sourceName = sourceNameInput
-                        lifecycleOwner.lifecycleScope.launch {
-                            settingsRepository.saveSourceName(sourceNameInput)
-                        }
-                        try {
-                            ndiSender?.release()
-                            ndiSender = NDIManager.createSender(sourceName)
-                            
-                            lifecycleOwner.lifecycleScope.launch {
-                                ndiSender?.tallyState?.collect { state ->
-                                    tallyState = state
-                                }
-                            }
-                            Log.d("UsbCameraScreen", "NDI source name updated to: $sourceName")
-                        } catch (e: Exception) {
-                            Log.e("UsbCameraScreen", "Failed to update source name: ${e.message}")
-                        }
+                        viewModel.saveSourceName(sourceNameInput)
                     }
                     showSettings = false
                 },
