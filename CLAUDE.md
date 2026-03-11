@@ -31,7 +31,7 @@ MyNdiCam (package: `com.soerjo.myndicam`) - Android NDI Camera Streamer that sen
 
 ### Module Structure
 
-The project is organized into **four active modules**:
+The project is organized into **five modules**:
 
 1. **`app`** - Main application (camera + UI)
 2. **`ndi`** - Standalone NDI library module (reusable across projects)
@@ -54,43 +54,41 @@ The project is organized into **four active modules**:
 app/src/main/java/com/soerjo/myndicam/
 ├── presentation/                    # UI layer
 │   ├── MainActivity.kt             # Activity entry point (permissions, fullscreen)
+│   ├── fragment/
+│   │   └── UsbCameraFragment.kt   # Camera preview (libausbc base class)
 │   └── screen/camera/
-│       ├── CameraScreen.kt         # Main camera screen composable
-│       ├── CameraViewModel.kt      # ViewModel with StateFlow state management
-│       └── components/
-│           └── CameraDialogs.kt    # Reusable UI components
-│   └── theme/                      # Compose theme files
-├── domain/                          # Business logic layer
-│   ├── model/                      # Domain models (pure data classes)
-│   │   ├── CameraInfo.kt           # Sealed class for CameraX and USB cameras
+│       ├── CameraScreen.kt        # Main camera screen composable
+│       └── CameraViewModel.kt     # ViewModel with StateFlow state management
+├── domain/                         # Business logic layer
+│   ├── model/                     # Domain models (pure data classes)
+│   │   ├── CameraInfo.kt          # Sealed class for CameraX and USB cameras
 │   │   ├── CameraType.kt
 │   │   └── FrameRate.kt
-│   ├── repository/                 # Repository interfaces
+│   ├── repository/                # Repository interfaces
 │   │   ├── CameraRepository.kt
 │   │   └── SettingsRepository.kt
-│   └── usecase/                    # Use cases (business logic)
+│   └── usecase/                   # Use cases (business logic)
 │       ├── DetectCamerasUseCase.kt
 │       ├── ObserveSettingsUseCase.kt
 │       └── SaveSettingsUseCase.kt
-├── data/                            # Data layer
+├── data/                           # Data layer
 │   ├── repository/                 # Repository implementations
 │   │   ├── CameraRepositoryImpl.kt
 │   │   └── SettingsRepositoryImpl.kt
 │   ├── datasource/
-│   │   ├── CameraDataSource.kt     # CameraX operations
-│   │   └── UsbCameraDataSource.kt  # USB camera detection via USBMonitor
+│   │   ├── CameraDataSource.kt    # CameraX operations
+│   │   └── UsbCameraDataSource.kt # USB camera detection via USBMonitor
 │   └── camera/
-│       └── UsbCameraController.kt  # USB camera lifecycle & frame capture
-├── core/                            # Core utilities
+│       └── UsbCameraController.kt # USB camera lifecycle & frame capture
+├── core/                           # Core utilities
 │   ├── di/
-│   │   └── AppModule.kt            # Hilt DI module
-│   ├── util/                       # Extension functions
-│   │   ├── ImageFormatExtensions.kt # CameraX format conversions
-│   │   ├── UsbImageFormatExtensions.kt # USB camera format conversions
+│   │   └── AppModule.kt          # Hilt DI module
+│   ├── util/                      # Extension functions
+│   │   ├── ImageFormatExtensions.kt
 │   │   └── MathExtensions.kt
 │   └── common/
-│       └── Constants.kt            # App constants
-└── MyNdiApp.kt                      # Application class with @HiltAndroidApp
+│       └── Constants.kt           # App constants
+└── MyNdiApp.kt                    # Application class with @HiltAndroidApp
 ```
 
 ### NDI Module Structure
@@ -99,55 +97,73 @@ app/src/main/java/com/soerjo/myndicam/
 ndi/src/main/
 ├── java/com/soerjo/ndi/
 │   ├── model/
-│   │   └── TallyState.kt           # NDI domain model
+│   │   └── TallyState.kt          # NDI domain model
 │   ├── internal/
-│   │   └── NDIWrapper.kt           # JNI bindings (private API)
-│   ├── NDIManager.kt               # Public API - lifecycle singleton
-│   └── NDISender.kt                # Public API - sender instances
+│   │   └── NDIWrapper.kt          # JNI bindings (private API)
+│   ├── NDIManager.kt              # Public API - lifecycle singleton
+│   └── NDISender.kt               # Public API - sender instances
 ├── cpp/
-│   ├── ndi_wrapper.cpp             # JNI implementation
-│   ├── Include/                    # NDI SDK headers
-│   └── CMakeLists.txt              # Native build config
+│   ├── ndi_wrapper.cpp            # JNI implementation
+│   ├── Include/                   # NDI SDK headers
+│   └── CMakeLists.txt             # Native build config
 └── jniLibs/
-    ├── arm64-v8a/libndi.so         # NDI native library (NOT in repo - manual setup)
-    └── armeabi-v7a/libndi.so       # NDI native library (NOT in repo - manual setup)
+    ├── arm64-v8a/libndi.so       # NDI native library (NOT in repo - manual setup)
+    └── armeabi-v7a/libndi.so     # NDI native library (NOT in repo - manual setup)
 ```
 
 ### USB Camera Modules Structure
 
 ```
 libuvc/
-├── src/main/jni/                   # Native JNI implementation (ndk-build)
-│   ├── UVCCamera.cpp/h            # UVC camera implementation
+├── src/main/jni/                  # Native JNI implementation (ndk-build)
+│   ├── UVCCamera.cpp/h           # UVC camera implementation
 │   ├── UVCPreview.cpp/h           # Preview handling
-│   └── libjpeg-turbo-1.5.0/       # JPEG codec
-└── jniLibs/                        # Pre-built native libraries
+│   └── libjpeg-turbo-1.5.0/      # JPEG codec
+└── jniLibs/                      # Pre-built native libraries
     ├── arm64-v8a/libUVCCamera.so
     ├── armeabi-v7a/libUVCCamera.so
     └── ...
 
 libausbc/
 └── src/main/java/com/jiangdg/ausbc/
-    ├── MultiCameraClient.kt        # Multi-camera management
-    ├── camera/CameraUVC.kt         # UVC camera implementation
-    ├── base/CameraFragment.kt      # Base fragment for camera operations
-    └── utils/                      # Utilities
+    ├── MultiCameraClient.kt       # Multi-camera management
+    ├── camera/CameraUVC.kt        # UVC camera implementation
+    ├── base/CameraFragment.kt     # Base fragment for camera operations
+    └── utils/                     # Utilities
 ```
 
-### Key Architecture Patterns
+## Key Architecture Patterns
 
-**MVVM with Hilt DI:**
-- `CameraViewModel` (`@HiltViewModel`) - Injects use cases, emits `StateFlow<CameraUiState>`
-- `CameraScreen` - Collects state via `collectAsStateWithLifecycle()`
-- Repository pattern - Interfaces in `domain/repository/`, implementations in `data/repository/`
+### MVVM with Hilt DI (Standard Pattern)
+- **ViewModel**: `CameraViewModel` (`@HiltViewModel`) - Injects use cases, emits `StateFlow<CameraUiState>`
+- **Composable**: `CameraScreen` - Uses `hiltViewModel()` to get ViewModel, collects state via `collectAsStateWithLifecycle()`
+- **Repository pattern**: Interfaces in `domain/repository/`, implementations in `data/repository/`
 
-**Dependency Injection (Hilt):**
+**Correct way to use ViewModel in Composable:**
+```kotlin
+@Composable
+fun UsbCameraScreen(
+    viewModel: CameraViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    
+    // UI reads from uiState
+    // UI calls viewModel methods for actions
+}
+```
+
+**Wrong (anti-pattern) - Don't do this:**
+- Don't inject dependencies directly in Composable using EntryPointAccessors
+- Don't put business logic in Composable (NDI init, settings save, etc.)
+- Composable should only handle UI rendering and user interactions
+
+### Dependency Injection (Hilt)
 - `@HiltAndroidApp` on `MyNdiApp.kt` enables Hilt
 - `AppModule` binds repository interfaces to implementations
 - `@HiltViewModel` injects use cases into ViewModels
 - Uses **KSP** (not kapt) for annotation processing
 
-**CameraInfo Sealed Class:**
+### CameraInfo Sealed Class
 ```kotlin
 sealed class CameraInfo {
     data class CameraX(
@@ -165,7 +181,7 @@ sealed class CameraInfo {
 }
 ```
 
-**NDI Module API:**
+### NDI Module API
 ```kotlin
 // Global lifecycle (call once at app startup)
 NDIManager.initialize()
@@ -182,39 +198,42 @@ NDIManager.cleanup()
 
 ### Data Flow
 
-**CameraX Pipeline:**
+**Current USB Camera Pipeline (CameraScreen → ViewModel):**
 ```
-CameraX → YUV_420_888 → UyvyBufferPool.obtain() → convertYuvToUyvyDirect() →
-NDISender.sendFrame() → NDI async send
+UsbCameraFragment (CameraFragment base class)
+    ↓ frames via IPreviewDataCallBack
+CameraScreen (Composable)
+    ↓ frame callback
+    ↓ convert format (NV21/RGBA → UYVY)
+    ↓ viewModel.sendFrame()
+CameraViewModel
+    ↓ ndiSender.sendFrame()
+NDISender → NDI async send
 ```
 
-**USB Camera Pipeline:**
+**Settings Flow:**
 ```
-USBMonitor → UsbCameraController → YUYV/NV21 → convertYuyvToUyvy() →
-NDISender.sendFrame() → NDI async send
+CameraScreen (UI)
+    ↓ viewModel.saveSourceName()
+CameraViewModel
+    ↓ saveSettingsUseCase.saveSourceName()
+SettingsRepository (SettingsRepositoryImpl)
+    ↓ SharedPreferences
 ```
 
-**Image Processing:**
-- CameraX: YUV_420_888 → UYVY (NDI native format, 2 bytes/pixel)
-- USB Camera: YUYV/NV21 → UYVY (NDI native format, 2 bytes/pixel)
-- Buffer pooling via `UyvyBufferPool` reduces GC pressure
-- Direct ByteBuffer access avoids copying intermediate arrays
+### Settings Repository
+- Uses SharedPreferences via `SettingsRepositoryImpl`
+- `SettingsRepository` interface in domain layer
+- Exposes Flow for reactive updates
+- Persists: source name, frame rate
 
-**Tally System:**
+### Tally System
 ```
 Native C++ thread (10Hz polling) → NDISender.onTallyStateChange() →
-StateFlow<TallyState> → UI observes → tally indicators update
+StateFlow<TallyState> → UI observes via uiState.tallyState → tally indicators update
 ```
 
-### NDI Tally System
-
-The app implements NDI tally feedback:
-- Native C++ thread polls `send_get_tally()` at 10Hz
-- When state changes, calls `NDISender.onTallyStateChange(isOnPreview, isOnProgram)`
-- `NDISender` exposes `tallyState: StateFlow<TallyState>`
-- UI observes this state for live indicators (green = live/on-program, yellow = preview)
-
-### Important Constants
+## Important Constants
 
 - **Min SDK**: 29, **Target SDK**: 36
 - **Resolution**: 1920x1080 (1080p)
@@ -224,6 +243,7 @@ The app implements NDI tally feedback:
 - **Java**: 11
 - **NDK**: r21 or later (for NDI module), 27.0.12077973 (for libnative)
 - **CMake**: 3.22.1
+- **Screen Mode**: `Constants.SCREEN_MODE` controls which screen to show (2 = UsbCameraScreen)
 
 ## NDI SDK Setup (Required)
 
@@ -243,40 +263,64 @@ The app supports USB UVC cameras via the libausbc library:
 ### USB Camera Detection
 - `UsbCameraDataSource` detects USB cameras via `USBMonitor`
 - USB cameras appear in the camera list with `CameraInfo.Usb` type
-- USB device filter is defined in `app/src/main/res/xml/usb_device_filter.xml`
+- USB device filter is defined in `app/src/main/res_filter.xml`
 
 ### USB Camera Preview
-- USB cameras use `UsbCameraController` for lifecycle management
-- Preview frames are captured via `IPreviewDataCallBack`
-- YUYV/NV21 format is converted to UYVY for NDI streaming
+/xml/usb_device- `UsbCameraFragment` extends `CameraFragment` from libausbc
+- Fragment handles camera preview automatically via base class
+- Frames exposed via `setFrameCallback(IPreviewDataCallBack)`
 
 ### USB Camera Permissions
 - USB host mode permission is required (`android.hardware.usb.host`)
 - USB device attachment intent filter for automatic app launch
 - Permission is requested via `USBMonitor.requestPermission()`
 
+### Frame Format Conversion
+- USB camera provides NV21 or RGBA format
+- Must convert to UYVY for NDI streaming
+- Conversion functions in `CameraScreen.kt`:
+  - `convertToUyvy()` - dispatches to appropriate converter
+  - `convertNv21ToUyvy()` - NV21 → UYVY
+  - `convertRgbaToUyvy()` - RGBA → UYVY
+
 ## Code Patterns
 
 ### Composable State Management
-- Use `remember { mutableStateOf() }` for local UI state
+- Use `hiltViewModel()` to get ViewModel
+- Use `collectAsStateWithLifecycle()` to collect StateFlow
+- Use `remember { mutableStateOf() }` for local UI state only
 - Use `derivedStateOf { }` for computed values
 - Use `LaunchedEffect` for side effects on state changes
 
-### Camera Binding
-The camera is rebound when `selectedCamera` or `isStreaming` changes via `LaunchedEffect`.
-- CameraX cameras use `ProcessCameraProvider.bindToLifecycle()`
-- USB cameras use `UsbCameraController.openCamera()`
+### CameraViewModel State (CameraUiState)
+```kotlin
+data class CameraUiState(
+    val isStreaming: Boolean = false,
+    val availableCameras: List<CameraInfo> = emptyList(),
+    val selectedCamera: CameraInfo? = null,
+    val selectedFrameRate: FrameRate = FrameRate.FPS_30,
+    val actualResolution: Size = Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
+    val tallyState: TallyState = TallyState(),
+    val sourceName: String = Constants.DEFAULT_SOURCE_NAME,
+    val isLoading: Boolean = true,
+    val usbConnectionState: UsbConnectionState = UsbConnectionState.Idle,
+    val errorMessage: String? = null
+)
+```
+
+### ViewModel Methods for Composable
+- `toggleStreaming()` - Toggle NDI streaming on/off
+- `saveSourceName(name: String)` - Save NDI source name
+- `updateActualResolution(width, height)` - Update resolution from camera
+- `sendFrame(data, width, height, stride)` - Send frame to NDI
 
 ### Performance Patterns
 1. **Volatile cache**: `CameraViewModel` uses `@Volatile` for cached streaming state to avoid StateFlow read barrier in hot path (sendFrame called every frame)
 2. **Buffer pooling**: `UyvyBufferPool` in `core/util/ImageFormatExtensions.kt` provides buffer pooling to reduce GC pressure from per-frame allocations
-3. **Direct ByteBuffer access**: `convertYuvToUyvyDirect()` reads directly from Image.Plane ByteBuffers to avoid intermediate array copies
+3. **Direct ByteBuffer access**: Reads directly from Image.Plane ByteBuffers to avoid intermediate array copies
 
 ### Native Lifecycle
 Always call `NDIManager.cleanup()` in `Application.onTerminate()` or `Activity.onDestroy()` to properly release native resources and stop the tally polling thread. NDISender instances should be released via `release()` when no longer needed.
-
-### Settings Persistence
-Settings use SharedPreferences with helper methods in `SettingsRepositoryImpl`.
 
 ### Module Dependencies
 - **app** depends on **ndi**, **libausbc** (via `implementation(project(":..."))`)
