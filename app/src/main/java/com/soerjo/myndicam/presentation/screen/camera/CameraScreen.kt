@@ -1,5 +1,6 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -57,11 +58,22 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
 import com.soerjo.myndicam.core.common.Constants
+import com.soerjo.myndicam.domain.repository.SettingsRepository
 import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
 import com.soerjo.ndi.NDIManager
 import com.soerjo.ndi.NDISender
 import com.soerjo.ndi.model.TallyState
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.launch
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface CameraScreenEntryPoint {
+    fun settingsRepository(): SettingsRepository
+}
 
 @Composable
 fun CameraScreen() {
@@ -290,9 +302,19 @@ fun NewUIScreen() {
 @Composable
 fun UsbCameraScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+
+    val settingsRepository = remember {
+        val appContext = context.applicationContext
+        val entryPoint = EntryPointAccessors.fromApplication(
+            appContext,
+            CameraScreenEntryPoint::class.java
+        )
+        entryPoint.settingsRepository()
+    }
 
     var isStreaming by remember { mutableStateOf(false) }
-    var sourceName by remember { mutableStateOf("USB Camera") }
+    var sourceName by remember { mutableStateOf("") }
     var currentWidth by remember { mutableIntStateOf(0) }
     var currentHeight by remember { mutableIntStateOf(0) }
     var currentFps by remember { mutableIntStateOf(0) }
@@ -307,6 +329,37 @@ fun UsbCameraScreen() {
     var sourceNameInput by remember { mutableStateOf(sourceName) }
 
     var usbFragment by remember { mutableStateOf<UsbCameraFragment?>(null) }
+
+    LaunchedEffect(Unit) {
+        settingsRepository.getSourceName().collect { name ->
+            if (sourceName.isEmpty()) {
+                sourceName = name
+                sourceNameInput = name
+            }
+        }
+    }
+
+    LaunchedEffect(sourceName) {
+        if (sourceName.isNotEmpty()) {
+            try {
+                if (!NDIManager.isInitialized()) {
+                    NDIManager.initialize()
+                }
+                ndiSender?.release()
+                ndiSender = NDIManager.createSender(sourceName)
+
+                ndiSender?.let { sender ->
+                    lifecycleOwner.lifecycleScope.launch {
+                        sender.tallyState.collect { state ->
+                            tallyState = state
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("UsbCameraScreen", "Failed to initialize NDI: ${e.message}")
+            }
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
     val blinkAlpha by infiniteTransition.animateFloat(
@@ -330,26 +383,6 @@ fun UsbCameraScreen() {
         else -> Color.Transparent
     }
 
-    LaunchedEffect(Unit) {
-        try {
-            if (!NDIManager.isInitialized()) {
-                NDIManager.initialize()
-            }
-            ndiSender = NDIManager.createSender(sourceName)
-
-            ndiSender?.let { sender ->
-                lifecycleOwner.lifecycleScope.launch {
-                    sender.tallyState.collect { state ->
-                        tallyState = state
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("UsbCameraScreen", "Failed to initialize NDI: ${e.message}")
-        }
-    }
-
-    val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     val fragmentManager = activity?.supportFragmentManager
 
@@ -533,12 +566,13 @@ fun UsbCameraScreen() {
                 onSave = {
                     if (sourceNameInput.isNotBlank()) {
                         sourceName = sourceNameInput
+                        lifecycleOwner.lifecycleScope.launch {
+                            settingsRepository.saveSourceName(sourceNameInput)
+                        }
                         try {
-                            // Release old sender and create new one with updated name
                             ndiSender?.release()
                             ndiSender = NDIManager.createSender(sourceName)
                             
-                            // Re-collect tally state from new sender
                             lifecycleOwner.lifecycleScope.launch {
                                 ndiSender?.tallyState?.collect { state ->
                                     tallyState = state
