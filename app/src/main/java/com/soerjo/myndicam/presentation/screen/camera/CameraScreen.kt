@@ -1,9 +1,6 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
-import android.hardware.usb.UsbDevice
 import android.util.Log
-import android.view.TextureView
-import android.view.ViewGroup
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -32,7 +29,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,35 +55,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
-import com.jiangdg.ausbc.callback.IDeviceConnectCallBack
-import com.jiangdg.usb.USBMonitor
+import com.jiangdg.ausbc.callback.IPreviewDataCallBack
 import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.data.camera.UsbCameraController
-import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
 import com.soerjo.ndi.NDIManager
 import com.soerjo.ndi.NDISender
 import com.soerjo.ndi.model.TallyState
 import kotlinx.coroutines.launch
-import androidx.fragment.app.Fragment
 
 @Composable
 fun CameraScreen() {
     when (Constants.SCREEN_MODE) {
-        0 -> BlackScreen()
-        1 -> NewUIScreen()
         2 -> UsbCameraScreen()
-        3 -> UsbCameraFragmentScreen()
     }
-}
-
-@Composable
-fun BlackScreen() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    )
 }
 
 @Composable
@@ -309,15 +289,7 @@ fun NewUIScreen() {
 
 @Composable
 fun UsbCameraScreen() {
-//    Box(
-//        modifier = Modifier
-//            .fillMaxSize()
-//            .background(Color.Black)
-//    )
     val lifecycleOwner = LocalLifecycleOwner.current
-    
-    var usbCameraController by remember { mutableStateOf<UsbCameraController?>(null) }
-    var usbPreviewTextureView by remember { mutableStateOf<TextureView?>(null) }
 
     var isStreaming by remember { mutableStateOf(false) }
     var sourceName by remember { mutableStateOf("USB Camera") }
@@ -330,10 +302,11 @@ fun UsbCameraScreen() {
     var ndiSender by remember { mutableStateOf<NDISender?>(null) }
     var tallyState by remember { mutableStateOf(TallyState()) }
 
-    var isConnecting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(sourceName) }
+
+    var usbFragment by remember { mutableStateOf<UsbCameraFragment?>(null) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
     val blinkAlpha by infiniteTransition.animateFloat(
@@ -356,7 +329,7 @@ fun UsbCameraScreen() {
         isStreaming && tallyState.isOnPreview -> Color(0xFFFFFF00)
         else -> Color.Transparent
     }
-    
+
     LaunchedEffect(Unit) {
         try {
             if (!NDIManager.isInitialized()) {
@@ -376,109 +349,9 @@ fun UsbCameraScreen() {
         }
     }
 
-    val usbDeviceCallback = remember {
-        object : IDeviceConnectCallBack {
-            override fun onAttachDev(device: UsbDevice?) {
-                Log.d("UsbCameraScreen", "USB device attached: ${device?.deviceName}")
-            }
-
-            override fun onDetachDec(device: UsbDevice?) {
-                Log.d("UsbCameraScreen", "USB device detached: ${device?.deviceName}")
-                if (usbCameraController?.getUsbDevice()?.deviceId == device?.deviceId) {
-                    usbCameraController?.cleanup()
-                    usbCameraController = null
-                    isConnecting = false
-                }
-            }
-
-            override fun onConnectDev(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
-                Log.d("UsbCameraScreen", "USB device connected: ${device?.deviceName}")
-                device?.let { usbDevice ->
-                    ctrlBlock?.let { block ->
-                        val context = usbPreviewTextureView?.context ?: return@let
-                        val controller = UsbCameraController(
-                            context = context,
-                            usbDevice = usbDevice,
-                            usbControlBlock = block
-                        )
-
-                        controller.onFrameCallback = { data, width, height, stride ->
-                            if (width != currentWidth || height != currentHeight) {
-                                currentWidth = width
-                                currentHeight = height
-                            }
-
-                            frameCount++
-                            val now = System.currentTimeMillis()
-                            if (now - lastFpsTime >= 1000) {
-                                currentFps = frameCount
-                                frameCount = 0
-                                lastFpsTime = now
-                            }
-
-                            if (data != null && isStreaming) {
-                                try {
-                                    ndiSender?.sendFrame(data, width, height, stride)
-                                } catch (e: Exception) {
-                                    Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
-                                }
-                            }
-                        }
-
-                        usbCameraController = controller
-                        isConnecting = false
-
-                        usbPreviewTextureView?.let { textureView ->
-                            controller.openCamera(textureView)
-                        }
-                    }
-                }
-            }
-
-            override fun onDisConnectDec(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
-                Log.d("UsbCameraScreen", "USB device disconnected: ${device?.deviceName}")
-                if (usbCameraController?.getUsbDevice()?.deviceId == device?.deviceId) {
-                    usbCameraController?.closeCamera()
-                    usbCameraController = null
-                    isConnecting = false
-                }
-            }
-
-            override fun onCancelDev(device: UsbDevice?) {
-                Log.d("UsbCameraScreen", "USB device permission cancelled")
-                isConnecting = false
-            }
-        }
-    }
-
     val context = LocalContext.current
-//    val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     val fragmentManager = activity?.supportFragmentManager
-
-    LaunchedEffect(Unit) {
-        try {
-            val usbDataSource = UsbCameraDataSource(context)
-            usbDataSource.initialize()
-            usbDataSource.setDeviceConnectCallBack(usbDeviceCallback)
-
-            val devices = usbDataSource.getDeviceList()
-            if (devices.isNotEmpty()) {
-                isConnecting = true
-                usbDataSource.requestPermission(devices.first())
-            }
-        } catch (e: Exception) {
-            Log.e("UsbCameraScreen", "Failed to setup USB: ${e.message}")
-        }
-    }
-
-    LaunchedEffect(usbCameraController, usbPreviewTextureView) {
-        val controller = usbCameraController
-        val textureView = usbPreviewTextureView
-        if (controller != null && textureView != null) {
-            controller.openCamera(textureView)
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
@@ -491,74 +364,50 @@ fun UsbCameraScreen() {
             modifier = Modifier.fillMaxSize(),
             update = { fragmentContainer ->
                 fragmentManager?.let { fm ->
-                    if (fm.findFragmentById(fragmentContainer.id) == null) {
+                    val existingFragment = fm.findFragmentById(fragmentContainer.id)
+                    if (existingFragment == null) {
                         fm.beginTransaction()
                             .replace(fragmentContainer.id, UsbCameraFragment())
                             .commit()
+                    } else {
+                        val fragment = existingFragment as? UsbCameraFragment
+                        if (fragment != null && fragment != usbFragment) {
+                            usbFragment = fragment
+                            fragment.setFrameCallback(object : IPreviewDataCallBack {
+                                override fun onPreviewData(
+                                    data: ByteArray?,
+                                    width: Int,
+                                    height: Int,
+                                    format: IPreviewDataCallBack.DataFormat
+                                ) {
+                                    if (width != currentWidth || height != currentHeight) {
+                                        currentWidth = width
+                                        currentHeight = height
+                                    }
+
+                                    frameCount++
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastFpsTime >= 1000) {
+                                        currentFps = frameCount
+                                        frameCount = 0
+                                        lastFpsTime = now
+                                    }
+
+                                    if (data != null && isStreaming) {
+                                        try {
+                                            val uyvyData = convertToUyvy(data, width, height, format)
+                                            ndiSender?.sendFrame(uyvyData, width, height, width * 2)
+                                        } catch (e: Exception) {
+                                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
+                                        }
+                                    }
+                                }
+                            })
+                        }
                     }
                 }
             }
         )
-//        AndroidView(
-//            factory = { ctx ->
-//                TextureView(ctx).apply {
-//                    layoutParams = ViewGroup.LayoutParams(
-//                        ViewGroup.LayoutParams.MATCH_PARENT,
-//                        ViewGroup.LayoutParams.MATCH_PARENT
-//                    )
-//                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-//                        override fun onSurfaceTextureAvailable(
-//                            surface: android.graphics.SurfaceTexture,
-//                            width: Int,
-//                            height: Int
-//                        ) {
-//                            Log.d("UsbCameraScreen", "TextureView surface available")
-//                            usbPreviewTextureView = this@apply
-//                        }
-//
-//                        override fun onSurfaceTextureSizeChanged(
-//                            surface: android.graphics.SurfaceTexture,
-//                            width: Int,
-//                            height: Int
-//                        ) {}
-//
-//                        override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-//                            usbPreviewTextureView = null
-//                            return true
-//                        }
-//
-//                        override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}
-//                    }
-//                }
-//            },
-//            modifier = Modifier.fillMaxSize()
-//        )
-
-        if (isConnecting) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        }
-
-//        if (!isConnecting && usbCameraController == null && currentHeight == 0) {
-//            Box(
-//                modifier = Modifier.fillMaxSize(),
-//                contentAlignment = Alignment.Center
-//            ) {
-//                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//                    CircularProgressIndicator(color = Color.White.copy(alpha = 0.7f))
-//                    Spacer(modifier = Modifier.height(16.dp))
-//                    Text(
-//                        "Waiting for USB Camera...",
-//                        color = Color.White.copy(alpha = 0.7f),
-//                        fontSize = 16.sp
-//                    )
-//                }
-//            }
-//        }
 
         if (isStreaming && tallyState.isOnProgram) {
             Box(
@@ -812,4 +661,78 @@ private fun SimpleSettingsDialog(
             }
         }
     }
+}
+
+private fun convertToUyvy(data: ByteArray, width: Int, height: Int, format: IPreviewDataCallBack.DataFormat): ByteArray {
+    return when (format) {
+        IPreviewDataCallBack.DataFormat.NV21 -> convertNv21ToUyvy(data, width, height)
+        IPreviewDataCallBack.DataFormat.RGBA -> convertRgbaToUyvy(data, width, height)
+    }
+}
+
+private fun convertNv21ToUyvy(nv21Data: ByteArray, width: Int, height: Int): ByteArray {
+    val uyvyData = ByteArray(width * height * 2)
+
+    val ySize = width * height
+    val vuOffset = ySize
+
+    for (y in 0 until height step 2) {
+        for (x in 0 until width step 2) {
+            val yIndex00 = y * width + x
+            val yIndex01 = y * width + (x + 1)
+            val yIndex10 = (y + 1) * width + x
+            val yIndex11 = (y + 1) * width + (x + 1)
+
+            val y00 = nv21Data[yIndex00].toInt() and 0xFF
+            val y01 = nv21Data[yIndex01].toInt() and 0xFF
+            val y10 = nv21Data[yIndex10].toInt() and 0xFF
+            val y11 = nv21Data[yIndex11].toInt() and 0xFF
+
+            val vuIndex = vuOffset + (y / 2) * width + x
+            val v = nv21Data[vuIndex].toInt() and 0xFF
+            val u = nv21Data[vuIndex + 1].toInt() and 0xFF
+
+            uyvyData[y * width * 2 + x * 2] = u.toByte()
+            uyvyData[y * width * 2 + x * 2 + 1] = y00.toByte()
+            uyvyData[y * width * 2 + (x + 1) * 2] = v.toByte()
+            uyvyData[(y + 1) * width * 2 + x * 2] = u.toByte()
+            uyvyData[(y + 1) * width * 2 + (x + 1) * 2] = y01.toByte()
+            uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y10.toByte()
+            uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y11.toByte()
+        }
+    }
+
+    return uyvyData
+}
+
+private fun convertRgbaToUyvy(rgbaData: ByteArray, width: Int, height: Int): ByteArray {
+    val uyvyData = ByteArray(width * height * 2)
+
+    for (y in 0 until height) {
+        for (x in 0 until width step 2) {
+            val idx0 = (y * width + x) * 4
+            val idx1 = (y * width + x + 1) * 4
+
+            val r0 = rgbaData[idx0].toInt() and 0xFF
+            val g0 = rgbaData[idx0 + 1].toInt() and 0xFF
+            val b0 = rgbaData[idx0 + 2].toInt() and 0xFF
+
+            val r1 = rgbaData[idx1].toInt() and 0xFF
+            val g1 = rgbaData[idx1 + 1].toInt() and 0xFF
+            val b1 = rgbaData[idx1 + 2].toInt() and 0xFF
+
+            val y0 = ((66 * r0 + 129 * g0 + 25 * b0 + 128) shr 8) + 16
+            val y1 = ((66 * r1 + 129 * g1 + 25 * b1 + 128) shr 8) + 16
+            val u = ((-38 * r0 - 74 * g0 + 112 * b0 + 128) shr 8) + 128
+            val v = ((112 * r0 - 94 * g0 - 18 * b1 + 128) shr 8) + 128
+
+            val outIdx = y * width * 2 + x * 2
+            uyvyData[outIdx] = u.toByte()
+            uyvyData[outIdx + 1] = y0.toByte()
+            uyvyData[outIdx + 2] = v.toByte()
+            uyvyData[outIdx + 3] = y1.toByte()
+        }
+    }
+
+    return uyvyData
 }
