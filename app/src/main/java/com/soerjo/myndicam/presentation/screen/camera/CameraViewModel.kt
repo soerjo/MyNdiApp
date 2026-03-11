@@ -8,8 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.soerjo.myndicam.core.common.Constants
 import com.soerjo.myndicam.core.util.formatAspectRatio
 import com.soerjo.myndicam.data.camera.UsbCameraController
+import com.soerjo.myndicam.data.datasource.CameraDataSource
 import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
+import com.soerjo.myndicam.domain.model.CameraType
 import com.soerjo.myndicam.domain.model.FrameRate
 import com.soerjo.myndicam.domain.usecase.ObserveSettingsUseCase
 import com.soerjo.myndicam.domain.usecase.SaveSettingsUseCase
@@ -48,10 +50,9 @@ data class CameraUiState(
  */
 @HiltViewModel
 class CameraViewModel @Inject constructor(
-    // private val detectCamerasUseCase: DetectCamerasUseCase, // NDI/CameraX - commented out
     private val observeSettingsUseCase: ObserveSettingsUseCase,
     private val saveSettingsUseCase: SaveSettingsUseCase,
-    // private val cameraDataSource: CameraDataSource, // CameraX - commented out
+    private val cameraDataSource: CameraDataSource,
     private val usbCameraDataSource: UsbCameraDataSource
 ) : ViewModel() {
 
@@ -69,6 +70,9 @@ class CameraViewModel @Inject constructor(
     // USB camera management
     private val usbCameraControllers = mutableMapOf<Int, UsbCameraController>()
     private var activeUsbCameraController: UsbCameraController? = null
+
+    // Internal cameras (detected once)
+    private var internalCameras: List<CameraInfo.CameraX> = emptyList()
 
     init {
         initialize()
@@ -89,8 +93,15 @@ class CameraViewModel @Inject constructor(
                     }
                 }
 
+                // Detect internal cameras first
+                internalCameras = cameraDataSource.detectAvailableCameras()
+                Log.d(TAG, "Internal cameras detected: ${internalCameras.size}")
+
                 // Initialize USB camera monitoring
                 usbCameraDataSource.initialize()
+
+                // Detect all cameras and auto-select
+                detectCameras()
 
                 // Observe settings
                 combine(
@@ -119,10 +130,10 @@ class CameraViewModel @Inject constructor(
             }
         }
 
-        // Listen for detected cameras changes
+        // Listen for detected USB cameras changes
         viewModelScope.launch {
             usbCameraDataSource.detectedUsbCameras.collect {
-                updateUsbCameraList()
+                updateCameraListWithUsbChange()
             }
         }
     }
@@ -148,25 +159,34 @@ class CameraViewModel @Inject constructor(
     }
 
     /**
-     * Detect available cameras
-     * Only detects USB cameras (CameraX disabled)
+     * Detect available cameras - combines internal and USB cameras
+     * Auto-selects: USB if available, else back camera
      */
     fun detectCameras() {
         viewModelScope.launch {
             try {
-                // Only detect USB cameras
+                // Get USB cameras
                 val usbCameras = usbCameraDataSource.getDetectedCameras()
                 
-                // If we don't have a camera selected yet, pick the best one (USB)
+                // Combine internal + USB cameras
+                val allCameras = internalCameras + usbCameras
+
+                // Auto-select logic: USB if available, else back camera
                 if (_uiState.value.selectedCamera == null) {
-                    val initialCamera = usbCameras.firstOrNull()
+                    val selectedCamera = when {
+                        usbCameras.isNotEmpty() -> usbCameras.first()
+                        else -> internalCameras.find { it.type == CameraType.BACK } 
+                            ?: internalCameras.firstOrNull()
+                    }
                     
                     _uiState.value = _uiState.value.copy(
-                        availableCameras = usbCameras,
-                        selectedCamera = initialCamera
+                        availableCameras = allCameras,
+                        selectedCamera = selectedCamera
                     )
+                    Log.d(TAG, "Initial camera selected: ${selectedCamera?.name}")
                 } else {
-                    _uiState.value = _uiState.value.copy(availableCameras = usbCameras)
+                    // Update list but keep current selection if still valid
+                    _uiState.value = _uiState.value.copy(availableCameras = allCameras)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error detecting cameras: ${e.message}")
@@ -175,12 +195,43 @@ class CameraViewModel @Inject constructor(
     }
 
     /**
-     * Update USB camera list and auto-select if a new one is found
+     * Update camera list when USB cameras change (connect/disconnect)
+     */
+    private fun updateCameraListWithUsbChange() {
+        val usbCameras = usbCameraDataSource.getDetectedCameras()
+        val allCameras = internalCameras + usbCameras
+
+        val currentSelected = _uiState.value.selectedCamera
+        
+        // Auto-switch logic
+        val newSelectedCamera = when {
+            // USB connected - switch to USB if current is not USB
+            usbCameras.isNotEmpty() && currentSelected !is CameraInfo.Usb -> {
+                Log.d(TAG, "USB camera connected, switching to USB")
+                usbCameras.first()
+            }
+            // USB disconnected - switch to back camera if current was USB
+            usbCameras.isEmpty() && currentSelected is CameraInfo.Usb -> {
+                Log.d(TAG, "USB camera disconnected, switching to back camera")
+                internalCameras.find { it.type == CameraType.BACK } ?: internalCameras.firstOrNull()
+            }
+            // Keep current selection
+            else -> currentSelected
+        }
+
+        _uiState.value = _uiState.value.copy(
+            availableCameras = allCameras,
+            selectedCamera = newSelectedCamera
+        )
+        Log.d(TAG, "Cameras updated: ${allCameras.size} (${internalCameras.size} internal, ${usbCameras.size} USB)")
+    }
+
+    /**
+     * Update USB camera list (for backward compatibility)
      */
     fun updateUsbCameraList(autoSelect: Boolean = false) {
         val usbCameras = usbCameraDataSource.getDetectedCameras()
-        // Filter out any leftover internal cameras
-        val allCameras = usbCameras
+        val allCameras = internalCameras + usbCameras
 
         _uiState.value = _uiState.value.copy(availableCameras = allCameras)
         Log.d(TAG, "USB cameras updated: ${usbCameras.size} detected")
@@ -188,26 +239,12 @@ class CameraViewModel @Inject constructor(
         // Auto-select the first USB camera if requested and one exists
         if (autoSelect && usbCameras.isNotEmpty()) {
             val firstUsb = usbCameras.first()
-            if (_uiState.value.selectedCamera !is CameraInfo.Usb || (_uiState.value.selectedCamera as CameraInfo.Usb).deviceId != firstUsb.deviceId) {
+            if (_uiState.value.selectedCamera !is CameraInfo.Usb || (_uiState.value.selectedCamera as? CameraInfo.Usb)?.deviceId != firstUsb.deviceId) {
                 selectCamera(firstUsb)
                 Log.d(TAG, "Auto-selected USB camera: ${firstUsb.name}")
             }
         }
     }
-
-    /*
-     * Merge lists - refined to prioritize USB (commented out - not needed without CameraX)
-     *
-    private fun mergeCameraLists(
-        cameraXCameras: List<CameraInfo.CameraX>,
-        usbCameras: List<CameraInfo.Usb> = emptyList()
-    ): List<CameraInfo> {
-        val merged = mutableListOf<CameraInfo>()
-        merged.addAll(usbCameras)
-        // cameraXCameras will be empty as per refactor
-        return merged
-    }
-    */
 
     /**
      * Select a camera
@@ -349,6 +386,31 @@ class CameraViewModel @Inject constructor(
     }
 
     /**
+     * Get internal cameras list
+     */
+    fun getInternalCameras(): List<CameraInfo.CameraX> = internalCameras
+
+    /**
+     * Get all available cameras
+     */
+    fun getAllCameras(): List<CameraInfo> {
+        val usbCameras = usbCameraDataSource.getDetectedCameras()
+        return internalCameras + usbCameras
+    }
+
+    /**
+     * Refresh camera list - called when camera binding needs to be redone
+     */
+    fun refreshCameraList() {
+        updateCameraListWithUsbChange()
+    }
+
+    /**
+     * Get context for CameraX binding
+     */
+    fun getContext(): android.content.Context = cameraDataSource.getContext()
+
+    /**
      * Get formatted aspect ratio
      */
     fun getFormattedAspectRatio(): String {
@@ -365,7 +427,6 @@ class CameraViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // ndiSender?.release() // NDI - commented out
         usbCameraControllers.values.forEach { it.cleanup() }
         usbCameraControllers.clear()
         usbCameraDataSource.cleanup()

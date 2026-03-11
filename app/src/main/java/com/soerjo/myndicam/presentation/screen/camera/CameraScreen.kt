@@ -63,7 +63,8 @@ import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
 @Composable
 fun CameraScreen() {
     when (Constants.SCREEN_MODE) {
-        2 -> UsbCameraScreen()
+        1 -> UsbCameraScreen()
+        2 -> InternalCameraScreen()
     }
 }
 
