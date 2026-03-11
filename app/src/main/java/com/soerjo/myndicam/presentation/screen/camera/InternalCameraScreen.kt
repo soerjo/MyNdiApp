@@ -1,13 +1,8 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
 import android.util.Log
-import android.util.Size
-import androidx.camera.core.*
-import androidx.camera.core.resolutionselector.AspectRatioStrategy
-import androidx.camera.core.resolutionselector.ResolutionSelector
-import androidx.camera.core.resolutionselector.ResolutionStrategy
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageProxy
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -68,31 +62,28 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.core.util.UyvyBufferPool
 import com.soerjo.myndicam.data.camera.InternalCameraController
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.model.FrameRate
-import java.util.concurrent.Executors
+import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
+import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 
 @Composable
 fun InternalCameraScreen(
     viewModel: CameraViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var currentWidth by remember { mutableIntStateOf(0) }
-    var currentHeight by remember { mutableIntStateOf(0) }
+    // FPS and resolution from preview component
     var currentFps by remember { mutableIntStateOf(0) }
-    var frameCount by remember { mutableIntStateOf(0) }
-    var lastFpsTime by remember { mutableStateOf(System.currentTimeMillis()) }
-
+    var currentHeight by remember { mutableIntStateOf(0) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
@@ -136,106 +127,60 @@ fun InternalCameraScreen(
         else -> Color.Transparent
     }
 
-    // Store previewView reference
-    var previewView by remember { mutableStateOf<PreviewView?>(null) }
-
-    // ProcessCameraProvider reference
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-
-    // Background executor for frame processing to avoid blocking main thread
-    val frameProcessingExecutor = remember { Executors.newSingleThreadExecutor { r -> Thread(r, "NDI-Frame-Processor") } }
-
-    // Cleanup executor when composable is disposed
-    DisposableEffect(Unit) {
-        onDispose {
-            frameProcessingExecutor.shutdown()
-        }
-    }
-
-    // Camera binding effect
-    LaunchedEffect(uiState.selectedCamera) {
-        val selectedCamera = uiState.selectedCamera
-        if (selectedCamera !is CameraInfo.CameraX) return@LaunchedEffect
-
-        val cameraSelector = selectedCamera.cameraSelector
-        Log.d("InternalCameraScreen", "Binding camera: $cameraSelector")
-
-        try {
-            val cameraProvider = cameraProviderFuture.get()
-
-            val resolutionSelector = ResolutionSelector.Builder()
-                .setResolutionStrategy(
-                    ResolutionStrategy(
-                        Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
-                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
-                    )
-                )
-                .setAspectRatioStrategy(
-                    AspectRatioStrategy(
-                        AspectRatio.RATIO_16_9,
-                        AspectRatioStrategy.FALLBACK_RULE_AUTO
-                    )
-                )
-                .build()
-
-            val preview = Preview.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .build()
-                .also {
-                    it.setSurfaceProvider(previewView?.surfaceProvider)
-                }
-
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .setImageQueueDepth(4)
-                .build()
-                .apply {
-                    setAnalyzer(frameProcessingExecutor) { imageProxy ->
-
-                        if (imageProxy.width != currentWidth || imageProxy.height != currentHeight) {
-                            currentWidth = imageProxy.width
-                            currentHeight = imageProxy.height
-                            viewModel.updateActualResolution(imageProxy.width, imageProxy.height)
-                        }
-
-                        frameCount++
-                        val now = System.currentTimeMillis()
-                        if (now - lastFpsTime >= 1000) {
-                            currentFps = frameCount
-                            frameCount = 0
-                            lastFpsTime = now
-                        }
-
-                        viewModel.updateActualResolution(imageProxy.width, imageProxy.height)
-                        processImageForNDI(imageProxy, viewModel)
-                    }
-                }
-
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                preview,
-                imageAnalysis
-            )
-
-            Log.d("InternalCameraScreen", "Camera bound successfully")
-
-        } catch (e: Exception) {
-            Log.e("InternalCameraScreen", "Camera binding failed: ${e.message}", e)
-        }
-    }
+    val activity = context as? androidx.fragment.app.FragmentActivity
+    val fragmentManager = activity?.supportFragmentManager
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            factory = { ctx ->
-                PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                    previewView = this
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        when (Constants.SCREEN_MODE) {
+            1 ->         InternalCameraPreview(
+                lifecycleOwner = lifecycleOwner,
+                cameraSelector = (uiState.selectedCamera as? CameraInfo.CameraX)?.cameraSelector
+                    ?: CameraSelector.DEFAULT_BACK_CAMERA,
+                onFrameData = { frameInfo ->
+                    // Update UI tracking
+                    currentFps = frameInfo.fps
+                    currentHeight = frameInfo.height
+
+                    if (uiState.isStreaming) {
+                        try {
+                            val uyvyData = convertToUyvy(frameInfo)
+                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+                        } catch (e: Exception) {
+                            Log.e("InternalCameraScreen", "Error sending frame: ${e.message}")
+                        }
+                    }
+                },
+                targetWidth = Constants.TARGET_WIDTH,
+                targetHeight = Constants.TARGET_HEIGHT,
+                modifier = Modifier.fillMaxSize()
+            )
+            2 ->         UsbCameraPreview(
+                fragmentManager = fragmentManager!!,
+                onFrameData = { frameInfo ->
+                    // Update UI tracking
+                    currentFps = frameInfo.fps
+                    currentHeight = frameInfo.height
+
+                    if (frameInfo.data != null && uiState.isStreaming) {
+                        try {
+                            val uyvyData = convertToUyvy(
+                                frameInfo.data,
+                                frameInfo.width,
+                                frameInfo.height,
+                                frameInfo.format
+                            )
+                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+                        } catch (e: Exception) {
+                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+
+
 
         if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
             Box(
@@ -420,94 +365,6 @@ fun InternalCameraScreen(
             )
         }
     }
-}
-
-private fun processImageForNDI(
-    imageProxy: ImageProxy,
-    viewModel: CameraViewModel
-) {
-    try {
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val planes = imageProxy.planes
-
-        val yBuffer = planes[0].buffer
-        val uBuffer = planes[1].buffer
-        val vBuffer = planes[2].buffer
-
-        val yRowStride = planes[0].rowStride
-        val uRowStride = planes[1].rowStride
-        val vRowStride = planes[2].rowStride
-        val uPixelStride = planes[1].pixelStride
-        val vPixelStride = planes[2].pixelStride
-
-        val uyvyData = yuvToUyvy(
-            yBuffer, uBuffer, vBuffer,
-            width, height,
-            yRowStride, uRowStride, vRowStride,
-            uPixelStride, vPixelStride
-        )
-
-        val stride = width * 2
-        viewModel.sendFrame(uyvyData, width, height, stride)
-
-    } catch (e: Exception) {
-        Log.e("InternalCameraScreen", "Error processing image for NDI: ${e.message}")
-    } finally {
-        imageProxy.close()
-    }
-}
-
-/**
- * Optimized YUV to UYVY conversion with direct array access
- */
-private fun yuvToUyvy(
-    yBuffer: java.nio.ByteBuffer,
-    uBuffer: java.nio.ByteBuffer,
-    vBuffer: java.nio.ByteBuffer,
-    width: Int,
-    height: Int,
-    yRowStride: Int,
-    uRowStride: Int,
-    vRowStride: Int,
-    uPixelStride: Int,
-    vPixelStride: Int
-): ByteArray {
-    val uyvySize = width * height * 2
-    val uyvy = UyvyBufferPool.obtain(uyvySize)
-
-    val yData = if (yBuffer.hasArray()) yBuffer.array() else ByteArray(yBuffer.remaining()).also { yBuffer.get(it) }
-    val uData = if (uBuffer.hasArray()) uBuffer.array() else ByteArray(uBuffer.remaining()).also { uBuffer.get(it) }
-    val vData = if (vBuffer.hasArray()) vBuffer.array() else ByteArray(vBuffer.remaining()).also { vBuffer.get(it) }
-
-    var uyvyIndex = 0
-
-    for (y in 0 until height) {
-        for (x in 0 until width step 2) {
-            val yIndex1 = y * yRowStride + x
-            val yIndex2 = y * yRowStride + (x + 1)
-            val yValue1 = yData[yIndex1].toInt() and 0xFF
-            val yValue2 = if (x + 1 < width) {
-                yData[yIndex2].toInt() and 0xFF
-            } else {
-                yValue1
-            }
-
-            val uvY = y / 2
-            val uvX = x / 2
-            val uIndex = uvY * uRowStride + uvX * uPixelStride
-            val vIndex = uvY * vRowStride + uvX * vPixelStride
-            val uValue = uData[uIndex].toInt() and 0xFF
-            val vValue = vData[vIndex].toInt() and 0xFF
-
-            uyvy[uyvyIndex++] = uValue.toByte()
-            uyvy[uyvyIndex++] = yValue1.toByte()
-            uyvy[uyvyIndex++] = vValue.toByte()
-            uyvy[uyvyIndex++] = yValue2.toByte()
-        }
-    }
-
-    return uyvy
 }
 
 @Composable

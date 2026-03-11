@@ -52,20 +52,21 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.jiangdg.ausbc.callback.IPreviewDataCallBack
 import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
+import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
+import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 
 @Composable
 fun CameraScreen() {
-    when (Constants.SCREEN_MODE) {
-        1 -> UsbCameraScreen()
-        2 -> InternalCameraScreen()
-    }
+    InternalCameraScreen()
+//    when (Constants.SCREEN_MODE) {
+//        1 -> UsbCameraScreen()
+//        2 -> InternalCameraScreen()
+//    }
 }
 
 @Composable
@@ -75,17 +76,13 @@ fun UsbCameraScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var currentWidth by remember { mutableIntStateOf(0) }
-    var currentHeight by remember { mutableIntStateOf(0) }
+    // FPS and resolution from preview component
     var currentFps by remember { mutableIntStateOf(0) }
-    var frameCount by remember { mutableIntStateOf(0) }
-    var lastFpsTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var currentHeight by remember { mutableIntStateOf(0) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
-
-    var usbFragment by remember { mutableStateOf<UsbCameraFragment?>(null) }
 
     LaunchedEffect(uiState.sourceName) {
         sourceNameInput = uiState.sourceName
@@ -118,59 +115,28 @@ fun UsbCameraScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
-        AndroidView(
-            factory = { ctx ->
-                androidx.fragment.app.FragmentContainerView(ctx).apply {
-                    id = android.R.id.custom
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { fragmentContainer ->
-                fragmentManager?.let { fm ->
-                    val existingFragment = fm.findFragmentById(fragmentContainer.id)
-                    if (existingFragment == null) {
-                        fm.beginTransaction()
-                            .replace(fragmentContainer.id, UsbCameraFragment())
-                            .commit()
-                    } else {
-                        val fragment = existingFragment as? UsbCameraFragment
-                        if (fragment != null && fragment != usbFragment) {
-                            usbFragment = fragment
-                            fragment.setFrameCallback(object : IPreviewDataCallBack {
-                                override fun onPreviewData(
-                                    data: ByteArray?,
-                                    width: Int,
-                                    height: Int,
-                                    format: IPreviewDataCallBack.DataFormat
-                                ) {
-                                    if (width != currentWidth || height != currentHeight) {
-                                        currentWidth = width
-                                        currentHeight = height
-                                        viewModel.updateActualResolution(width, height)
-                                    }
+        UsbCameraPreview(
+            fragmentManager = fragmentManager!!,
+            onFrameData = { frameInfo ->
+                // Update UI tracking
+                currentFps = frameInfo.fps
+                currentHeight = frameInfo.height
 
-                                    frameCount++
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastFpsTime >= 1000) {
-                                        currentFps = frameCount
-                                        frameCount = 0
-                                        lastFpsTime = now
-                                    }
-
-                                    if (data != null && uiState.isStreaming) {
-                                        try {
-                                            val uyvyData = convertToUyvy(data, width, height, format)
-                                            viewModel.sendFrame(uyvyData, width, height, width * 2)
-                                        } catch (e: Exception) {
-                                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
-                                        }
-                                    }
-                                }
-                            })
-                        }
+                if (frameInfo.data != null && uiState.isStreaming) {
+                    try {
+                        val uyvyData = convertToUyvy(
+                            frameInfo.data,
+                            frameInfo.width,
+                            frameInfo.height,
+                            frameInfo.format
+                        )
+                        viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+                    } catch (e: Exception) {
+                        Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
                     }
                 }
-            }
+            },
+            modifier = Modifier.fillMaxSize()
         )
 
         if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
@@ -409,76 +375,3 @@ private fun SimpleSettingsDialog(
     }
 }
 
-private fun convertToUyvy(data: ByteArray, width: Int, height: Int, format: IPreviewDataCallBack.DataFormat): ByteArray {
-    return when (format) {
-        IPreviewDataCallBack.DataFormat.NV21 -> convertNv21ToUyvy(data, width, height)
-        IPreviewDataCallBack.DataFormat.RGBA -> convertRgbaToUyvy(data, width, height)
-    }
-}
-
-private fun convertNv21ToUyvy(nv21Data: ByteArray, width: Int, height: Int): ByteArray {
-    val uyvyData = ByteArray(width * height * 2)
-
-    val ySize = width * height
-    val vuOffset = ySize
-
-    for (y in 0 until height step 2) {
-        for (x in 0 until width step 2) {
-            val yIndex00 = y * width + x
-            val yIndex01 = y * width + (x + 1)
-            val yIndex10 = (y + 1) * width + x
-            val yIndex11 = (y + 1) * width + (x + 1)
-
-            val y00 = nv21Data[yIndex00].toInt() and 0xFF
-            val y01 = nv21Data[yIndex01].toInt() and 0xFF
-            val y10 = nv21Data[yIndex10].toInt() and 0xFF
-            val y11 = nv21Data[yIndex11].toInt() and 0xFF
-
-            val vuIndex = vuOffset + (y / 2) * width + x
-            val v = nv21Data[vuIndex].toInt() and 0xFF
-            val u = nv21Data[vuIndex + 1].toInt() and 0xFF
-
-            uyvyData[y * width * 2 + x * 2] = u.toByte()
-            uyvyData[y * width * 2 + x * 2 + 1] = y00.toByte()
-            uyvyData[y * width * 2 + (x + 1) * 2] = v.toByte()
-            uyvyData[(y + 1) * width * 2 + x * 2] = u.toByte()
-            uyvyData[(y + 1) * width * 2 + (x + 1) * 2] = y01.toByte()
-            uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y10.toByte()
-            uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y11.toByte()
-        }
-    }
-
-    return uyvyData
-}
-
-private fun convertRgbaToUyvy(rgbaData: ByteArray, width: Int, height: Int): ByteArray {
-    val uyvyData = ByteArray(width * height * 2)
-
-    for (y in 0 until height) {
-        for (x in 0 until width step 2) {
-            val idx0 = (y * width + x) * 4
-            val idx1 = (y * width + x + 1) * 4
-
-            val r0 = rgbaData[idx0].toInt() and 0xFF
-            val g0 = rgbaData[idx0 + 1].toInt() and 0xFF
-            val b0 = rgbaData[idx0 + 2].toInt() and 0xFF
-
-            val r1 = rgbaData[idx1].toInt() and 0xFF
-            val g1 = rgbaData[idx1 + 1].toInt() and 0xFF
-            val b1 = rgbaData[idx1 + 2].toInt() and 0xFF
-
-            val y0 = ((66 * r0 + 129 * g0 + 25 * b0 + 128) shr 8) + 16
-            val y1 = ((66 * r1 + 129 * g1 + 25 * b1 + 128) shr 8) + 16
-            val u = ((-38 * r0 - 74 * g0 + 112 * b0 + 128) shr 8) + 128
-            val v = ((112 * r0 - 94 * g0 - 18 * b1 + 128) shr 8) + 128
-
-            val outIdx = y * width * 2 + x * 2
-            uyvyData[outIdx] = u.toByte()
-            uyvyData[outIdx + 1] = y0.toByte()
-            uyvyData[outIdx + 2] = v.toByte()
-            uyvyData[outIdx + 3] = y1.toByte()
-        }
-    }
-
-    return uyvyData
-}
