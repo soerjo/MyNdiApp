@@ -13,6 +13,7 @@ import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.model.CameraType
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.usecase.ObserveSettingsUseCase
 import com.soerjo.myndicam.domain.usecase.SaveSettingsUseCase
 import com.soerjo.ndi.NDISender
@@ -40,6 +41,7 @@ data class CameraUiState(
     val actualResolution: Size = Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
     val tallyState: TallyState = TallyState(),
     val sourceName: String = Constants.DEFAULT_SOURCE_NAME,
+    val screenMode: ScreenMode = ScreenMode.INTERNAL,
     val isLoading: Boolean = true,
     val usbConnectionState: UsbConnectionState = UsbConnectionState.Idle,
     val errorMessage: String? = null
@@ -106,18 +108,20 @@ class CameraViewModel @Inject constructor(
                 // Observe settings
                 combine(
                     observeSettingsUseCase.getSourceName(),
-                    observeSettingsUseCase.getFrameRate()
-                ) { sourceName, frameRate ->
-                    Pair(sourceName, frameRate)
+                    observeSettingsUseCase.getFrameRate(),
+                    observeSettingsUseCase.getScreenMode()
+                ) { sourceName, frameRate, screenMode ->
+                    Triple(sourceName, frameRate, screenMode)
                 }
                 .catch { e ->
                     Log.e(TAG, "Error observing settings: ${e.message}")
                     _uiState.value = _uiState.value.copy(isLoading = false)
                 }
-                .collect { (sourceName, frameRate) ->
+                .collect { (sourceName, frameRate, screenMode) ->
                     _uiState.value = _uiState.value.copy(
                         sourceName = sourceName,
                         selectedFrameRate = frameRate,
+                        screenMode = screenMode,
                         isLoading = false
                     )
 
@@ -136,6 +140,63 @@ class CameraViewModel @Inject constructor(
                 updateCameraListWithUsbChange()
             }
         }
+
+        // Set up USB device connect/disconnect listener
+        setupUsbDeviceConnectListener()
+    }
+
+    private fun setupUsbDeviceConnectListener() {
+        usbCameraDataSource.setDeviceConnectCallBack(object : IDeviceConnectCallBack {
+            override fun onAttachDev(device: UsbDevice?) {
+                device?.let {
+                    Log.d(TAG, "[USB_DEVICE_ATTACH] Device attached: ${it.deviceName}, Vendor=${String.format("0x%04X", it.vendorId)}, Product=${String.format("0x%04X", it.productId)}")
+                }
+            }
+
+            override fun onDetachDec(device: UsbDevice?) {
+                device?.let {
+                    Log.d(TAG, "[USB_DEVICE_DETACH] Device detached: ${it.deviceName}")
+                    
+                    // Close controller if this was the active camera
+                    if (activeUsbCameraController?.getUsbDevice()?.deviceId == it.deviceId) {
+                        Log.d(TAG, "[USB_CONTROLLER_CLOSE] Closing active camera controller")
+                        activeUsbCameraController?.closeCamera()
+                        activeUsbCameraController = null
+                        
+                        // Update UI state
+                        _uiState.value = _uiState.value.copy(
+                            usbConnectionState = UsbConnectionState.Error("USB camera disconnected")
+                        )
+                        Log.d(TAG, "[USB_STATE_ERROR] Disconnection event")
+                    }
+                }
+            }
+
+            override fun onConnectDev(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
+                Log.d(TAG, "[USB_CAMERA_CONNECT] Device connected: ${device?.deviceName}")
+                device?.let { usbDev ->
+                    ctrlBlock?.let { ctrl ->
+                        // Only auto-reconnect if currently on USB screen
+                        if (_uiState.value.screenMode == ScreenMode.USB) {
+                            Log.d(TAG, "[USB_CAMERA_RECONNECT] Auto-reconnecting camera")
+                            _uiState.value = _uiState.value.copy(usbConnectionState = UsbConnectionState.Connecting)
+                            createUsbCameraController(usbDev, ctrl)
+                        } else {
+                            Log.d(TAG, "[USB_CAMERA_SKIP_RECONNECT] Not on USB screen, skipping auto-reconnect")
+                        }
+                    }
+                }
+            }
+
+            override fun onDisConnectDec(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
+                Log.d(TAG, "[USB_CAMERA_DISCONNECT] Device disconnected: ${device?.deviceName}")
+            }
+
+            override fun onCancelDev(device: UsbDevice?) {
+                Log.d(TAG, "[USB_CAMERA_CANCEL] Device cancelled: ${device?.deviceName}")
+            }
+        })
+        Log.d(TAG, "[USB_DEVICE_LISTENER] USB device connect listener set up")
     }
 
     private fun createNDISender(sourceName: String) {
@@ -329,6 +390,40 @@ class CameraViewModel @Inject constructor(
         isStreaming = !isStreaming
         _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
         Log.d(TAG, "NDI Streaming: ${if (isStreaming) "ON" else "OFF"}")
+    }
+
+    fun switchScreenMode() {
+        viewModelScope.launch {
+            // Stop streaming if currently active
+            if (isStreaming) {
+                toggleStreaming()
+            }
+
+            // Clean up USB camera when switching away from USB mode
+            if (_uiState.value.screenMode == ScreenMode.USB) {
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] Cleaning up USB camera")
+                activeUsbCameraController?.closeCamera()
+                activeUsbCameraController = null
+                _uiState.value = _uiState.value.copy(usbConnectionState = UsbConnectionState.Idle)
+                usbCameraControllers.clear()
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
+            }
+
+            // Toggle screen mode
+            val newMode = if (_uiState.value.screenMode == ScreenMode.INTERNAL) {
+                ScreenMode.USB
+            } else {
+                ScreenMode.INTERNAL
+            }
+
+            // Log screen mode transition
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Switching from ${_uiState.value.screenMode} to $newMode")
+
+            // Save the new screen mode
+            saveSettingsUseCase.saveScreenMode(newMode)
+            _uiState.value = _uiState.value.copy(screenMode = newMode)
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Screen mode switched to: $newMode")
+        }
     }
 
     /**

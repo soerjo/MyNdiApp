@@ -15,16 +15,20 @@ import com.jiangdg.ausbc.widget.IAspectRatio
 class UsbCameraFragment : CameraFragment() {
 
     private var frameCallback: IPreviewDataCallBack? = null
+    private var fragmentId: Int = 0
 
     fun setFrameCallback(callback: IPreviewDataCallBack) {
         frameCallback = callback
+        Log.d(TAG, "[FRAGMENT_CALLBACK_SET] Frame callback set - callback=${callback != null}")
     }
 
     fun clearFrameCallback() {
         frameCallback = null
+        Log.d(TAG, "[FRAGMENT_CALLBACK_CLEAR] Frame callback cleared")
     }
 
     override fun getRootView(inflater: LayoutInflater, container: ViewGroup?): View {
+        Log.d(TAG, "[FRAGMENT_VIEW_CREATE] Creating root view")
         return inflater.inflate(com.soerjo.myndicam.R.layout.fragment_camera, container, false)
     }
 
@@ -50,7 +54,7 @@ class UsbCameraFragment : CameraFragment() {
         when (code) {
             ICameraStateCallBack.State.OPENED -> {
                 val request = self.getCameraRequest()
-                Log.d(TAG, "USB Camera opened: ${request?.previewWidth}x${request?.previewHeight}")
+                Log.d(TAG, "[FRAGMENT_CAMERA_OPENED] USB Camera opened - Resolution: ${request?.previewWidth}x${request?.previewHeight}")
 
                 self.addPreviewDataCallBack(object : IPreviewDataCallBack {
                     override fun onPreviewData(
@@ -64,19 +68,38 @@ class UsbCameraFragment : CameraFragment() {
                 })
             }
             ICameraStateCallBack.State.CLOSED -> {
-                Log.d(TAG, "Camera closed")
+                Log.d(TAG, "[FRAGMENT_CAMERA_CLOSED] Camera closed")
             }
             ICameraStateCallBack.State.ERROR -> {
-                Log.e(TAG, "Camera error: $msg")
+                Log.e(TAG, "[FRAGMENT_CAMERA_ERROR] Camera error: $msg")
             }
             else -> {
-                Log.d(TAG, "Camera state: $code")
+                Log.d(TAG, "[FRAGMENT_STATE] Camera state: $code")
             }
         }
     }
 
     override fun initView() {
         super.initView()
+        Log.d(TAG, "[FRAGMENT_INIT] Fragment view initialized")
+    }
+
+    override fun onAttach(context: android.content.Context) {
+        super.onAttach(context)
+        fragmentId = this.hashCode()
+        Log.d(TAG, "[FRAGMENT_ATTACH] Fragment attached - id=$fragmentId")
+    }
+
+    override fun onDetach() {
+        Log.d(TAG, "[FRAGMENT_DETACH] Fragment detached - id=$fragmentId")
+        frameCallback = null
+        super.onDetach()
+    }
+
+    override fun onDestroyView() {
+        Log.d(TAG, "[FRAGMENT_VIEW_DESTROY] Fragment view destroyed - id=$fragmentId")
+        frameCallback = null
+        super.onDestroyView()
     }
 
     companion object {

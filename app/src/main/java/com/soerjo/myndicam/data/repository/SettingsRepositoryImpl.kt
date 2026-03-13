@@ -2,6 +2,7 @@ package com.soerjo.myndicam.data.repository
 
 import android.content.Context
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -22,9 +23,11 @@ class SettingsRepositoryImpl @Inject constructor(
         private const val PREFS_NAME = "NDIPrefs"
         private const val KEY_SOURCE_NAME = "ndi_source_name"
         private const val KEY_FRAME_RATE = "frame_rate"
+        private const val KEY_SCREEN_MODE = "screen_mode"
 
         const val DEFAULT_SOURCE_NAME = "Android Camera"
         val DEFAULT_FRAME_RATE = FrameRate.FPS_30
+        val DEFAULT_SCREEN_MODE = ScreenMode.INTERNAL
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -34,6 +37,9 @@ class SettingsRepositoryImpl @Inject constructor(
     )
     private val _frameRate = MutableStateFlow(
         FrameRate.fromFps(prefs.getInt(KEY_FRAME_RATE, DEFAULT_FRAME_RATE.fps))
+    )
+    private val _screenMode = MutableStateFlow(
+        ScreenMode.fromValue(prefs.getInt(KEY_SCREEN_MODE, DEFAULT_SCREEN_MODE.value))
     )
 
     override fun getSourceName(): Flow<String> = _sourceName.asStateFlow()
@@ -48,5 +54,12 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun saveFrameRate(frameRate: FrameRate) {
         prefs.edit().putInt(KEY_FRAME_RATE, frameRate.fps).apply()
         _frameRate.value = frameRate
+    }
+
+    override fun getScreenMode(): Flow<ScreenMode> = _screenMode.asStateFlow()
+
+    override suspend fun saveScreenMode(mode: ScreenMode) {
+        prefs.edit().putInt(KEY_SCREEN_MODE, mode.value).apply()
+        _screenMode.value = mode
     }
 }

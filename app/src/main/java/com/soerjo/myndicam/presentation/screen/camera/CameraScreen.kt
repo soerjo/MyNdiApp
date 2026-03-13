@@ -56,15 +56,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.soerjo.myndicam.core.common.Constants
+import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
 import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
 import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 
 @Composable
-fun CameraScreen() {
-    when (Constants.SCREEN_MODE) {
-        1 -> UsbCameraScreen()
-        2 -> InternalCameraScreen()
+fun CameraScreen(viewModel: CameraViewModel = hiltViewModel()) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    when (uiState.screenMode) {
+        ScreenMode.USB -> UsbCameraScreen()
+        ScreenMode.INTERNAL -> InternalCameraScreen()
     }
 }
 
@@ -137,6 +139,67 @@ fun UsbCameraScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Show "No USB camera connected" overlay
+        if (uiState.availableCameras.none { it is com.soerjo.myndicam.domain.model.CameraInfo.Usb }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No USB Camera Connected",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Connect a USB camera or switch to Internal Camera",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        // Show error overlay if USB camera was disconnected
+        if (uiState.usbConnectionState is UsbConnectionState.Error) {
+            val errorMsg = (uiState.usbConnectionState as UsbConnectionState.Error).message
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Camera Disconnected",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMsg,
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Reconnect the camera to continue",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
 
         if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
             Box(
@@ -243,6 +306,10 @@ fun UsbCameraScreen(
         if (showMenu) {
             SimpleMenuDialog(
                 sourceName = uiState.sourceName,
+                onSwitchCameraClick = {
+                    viewModel.switchScreenMode()
+                    showMenu = false
+                },
                 onSettingsClick = {
                     showMenu = false
                     showSettings = true
@@ -271,6 +338,7 @@ fun UsbCameraScreen(
 @Composable
 private fun SimpleMenuDialog(
     sourceName: String,
+    onSwitchCameraClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -281,8 +349,13 @@ private fun SimpleMenuDialog(
             Column(modifier = Modifier.padding(8.dp)) {
                 SimpleMenuItem(
                     title = sourceName,
-                    subtitle = "Camera",
+                    subtitle = "USB Camera",
                     onClick = onDismiss
+                )
+                SimpleMenuItem(
+                    title = "Switch to Internal Camera",
+                    subtitle = "Change camera type",
+                    onClick = onSwitchCameraClick
                 )
                 SimpleMenuItem(
                     title = "Settings",

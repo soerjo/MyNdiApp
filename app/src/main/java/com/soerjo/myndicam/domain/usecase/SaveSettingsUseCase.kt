@@ -1,6 +1,7 @@
 package com.soerjo.myndicam.domain.usecase
 
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.repository.SettingsRepository
 import javax.inject.Inject
 
@@ -16,5 +17,9 @@ class SaveSettingsUseCase @Inject constructor(
 
     suspend fun saveFrameRate(frameRate: FrameRate) {
         settingsRepository.saveFrameRate(frameRate)
+    }
+
+    suspend fun saveScreenMode(mode: ScreenMode) {
+        settingsRepository.saveScreenMode(mode)
     }
 }

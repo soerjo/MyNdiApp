@@ -311,6 +311,10 @@ fun InternalCameraScreen(
             SimpleMenuDialog(
                 cameraName = uiState.selectedCamera?.name ?: "Select Camera",
                 frameRateName = uiState.selectedFrameRate.displayName,
+                onSwitchCameraClick = {
+                    viewModel.switchScreenMode()
+                    showMenu = false
+                },
                 onCameraClick = {
                     showMenu = false
                     showCameraSelector = true
@@ -455,6 +459,7 @@ private fun FrameRateOption(
 private fun SimpleMenuDialog(
     cameraName: String,
     frameRateName: String,
+    onSwitchCameraClick: () -> Unit,
     onCameraClick: () -> Unit,
     onFrameRateClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -479,6 +484,12 @@ private fun SimpleMenuDialog(
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 8.dp),
                     color = Color.Black.copy(alpha = 0.1f)
+                )
+                MenuItem(
+                    icon = Icons.Filled.Refresh,
+                    title = "Switch to USB Camera",
+                    subtitle = "Change camera type",
+                    onClick = onSwitchCameraClick
                 )
                 MenuItem(
                     icon = Icons.Filled.Settings,
