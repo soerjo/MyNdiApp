@@ -1,31 +1,48 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
-import android.graphics.ImageFormat
 import android.util.Log
-import android.util.Size
-import android.view.ViewGroup
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.core.resolutionselector.ResolutionSelector
-import androidx.camera.core.resolutionselector.ResolutionStrategy
-import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,38 +50,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.core.util.convertYuvToUyvy
-import com.soerjo.myndicam.core.util.convertYuvToUyvyCropped
-import com.soerjo.myndicam.core.util.formatAspectRatio
-import com.soerjo.myndicam.domain.model.FrameRate
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.soerjo.myndicam.presentation.screen.camera.components.*
-import androidx.camera.core.resolutionselector.AspectRatioStrategy
-/**
- * Main Camera Screen composable
- */
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.soerjo.myndicam.core.common.Constants
+import com.soerjo.myndicam.domain.model.ScreenMode
+import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
+import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
+
 @Composable
-fun CameraScreen(
+fun CameraScreen(viewModel: CameraViewModel = hiltViewModel()) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    when (uiState.screenMode) {
+        ScreenMode.USB -> UsbCameraScreen()
+        ScreenMode.INTERNAL -> InternalCameraScreen()
+    }
+}
+
+@Composable
+fun UsbCameraScreen(
     viewModel: CameraViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    // FPS and resolution from preview component
+    var currentFps by remember { mutableIntStateOf(0) }
+    var currentHeight by remember { mutableIntStateOf(0) }
 
-    // Blinking animation for tally dot
+    var showMenu by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
+
+    LaunchedEffect(uiState.sourceName) {
+        sourceNameInput = uiState.sourceName
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "tally blink")
     val blinkAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -76,104 +100,107 @@ fun CameraScreen(
         label = "alpha"
     )
 
-    // Tally dot behavior:
-    // - isOnProgram (LIVE): Green blinking dot + green border
-    // - isOnPreview only: Yellow blinking dot (no border)
-    // - neither: Hidden dot
     val dotAlpha = when {
-        uiState.isStreaming && uiState.tallyState.isOnProgram -> blinkAlpha  // Green blinking
-        uiState.isStreaming && uiState.tallyState.isOnPreview -> blinkAlpha  // Yellow blinking
-        else -> 0f                 // Hidden
+        uiState.isStreaming && uiState.tallyState.isOnProgram -> blinkAlpha
+        uiState.isStreaming && uiState.tallyState.isOnPreview -> blinkAlpha
+        else -> 0f
     }
     val dotColor = when {
-        uiState.isStreaming && uiState.tallyState.isOnProgram -> Color(0xFF00FF00)  // Green for LIVE
-        uiState.isStreaming && uiState.tallyState.isOnPreview -> Color(0xFFFFFF00)  // Yellow for Preview
+        uiState.isStreaming && uiState.tallyState.isOnProgram -> Color(0xFF00FF00)
+        uiState.isStreaming && uiState.tallyState.isOnPreview -> Color(0xFFFFFF00)
         else -> Color.Transparent
     }
 
-    // Detect cameras on first composition
-    LaunchedEffect(Unit) {
-        val cameraProvider = cameraProviderFuture.get()
-        viewModel.detectCameras(cameraProvider)
-    }
+    val activity = context as? androidx.fragment.app.FragmentActivity
+    val fragmentManager = activity?.supportFragmentManager
 
-    // Rebind camera when selected camera or streaming state changes
-    LaunchedEffect(uiState.selectedCamera, uiState.isStreaming) {
-        val camera = uiState.selectedCamera ?: return@LaunchedEffect
-        val cameraProvider = cameraProviderFuture.get()
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
-        val resolutionSelector = ResolutionSelector.Builder()
-            .setResolutionStrategy(
-                ResolutionStrategy(
-                    Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
-                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
-                )
-            )
-            .setAspectRatioStrategy(
-                AspectRatioStrategy(
-                    AspectRatio.RATIO_16_9,
-                    AspectRatioStrategy.FALLBACK_RULE_AUTO
-                )
-            )
-            .build()
+        UsbCameraPreview(
+            fragmentManager = fragmentManager!!,
+            onFrameData = { frameInfo ->
+                // Update UI tracking
+                currentFps = frameInfo.fps
+                currentHeight = frameInfo.height
 
-        val preview = Preview.Builder()
-            .setResolutionSelector(resolutionSelector)
-            .build()
-            .also {
-                it.setSurfaceProvider(previewView?.surfaceProvider)
-            }
-
-        val imageAnalysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-            .setResolutionSelector(resolutionSelector)
-            .setImageQueueDepth(1)  // Lower latency with queue depth of 1
-            .build()
-            .also {
-                it.setAnalyzer(Dispatchers.Default.asExecutor()) { imageProxy ->
-                    // Update actual resolution from first frame
-                    viewModel.updateActualResolution(imageProxy.width, imageProxy.height)
-                    // Pass streaming state directly to avoid StateFlow access per frame
-                    processImageForNDI(imageProxy, viewModel, uiState.isStreaming)
-                }
-            }
-
-        try {
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                camera.cameraSelectorFilter,
-                preview,
-                imageAnalysis
-            )
-            val resolution = imageAnalysis.resolutionInfo?.resolution
-            if (resolution != null) {
-                viewModel.updateActualResolution(resolution.width, resolution.height)
-            }
-        } catch (exc: Exception) {
-            Log.e("CameraApp", "Use case binding failed: ${exc.message}", exc)
-        }
-    }
-
-    // Main UI
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview (center crop to match NDI output)
-        AndroidView(
-            factory = { ctx ->
-                PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    previewView = this
+                if (frameInfo.data != null && uiState.isStreaming) {
+                    try {
+                        val uyvyData = convertToUyvy(
+                            frameInfo.data,
+                            frameInfo.width,
+                            frameInfo.height,
+                            frameInfo.format
+                        )
+                        viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+                    } catch (e: Exception) {
+                        Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Green border overlay when on program
+        // Show "No USB camera connected" overlay
+        if (uiState.availableCameras.none { it is com.soerjo.myndicam.domain.model.CameraInfo.Usb }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No USB Camera Connected",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Connect a USB camera or switch to Internal Camera",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        // Show error overlay if USB camera was disconnected
+        if (uiState.usbConnectionState is UsbConnectionState.Error) {
+            val errorMsg = (uiState.usbConnectionState as UsbConnectionState.Error).message
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Camera Disconnected",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMsg,
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Reconnect the camera to continue",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
         if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
             Box(
                 modifier = Modifier
@@ -182,7 +209,6 @@ fun CameraScreen(
             )
         }
 
-        // Live indicator (only when streaming)
         if (uiState.isStreaming) {
             Box(
                 modifier = Modifier
@@ -202,7 +228,6 @@ fun CameraScreen(
             }
         }
 
-        // Status bar (top right) with blinking tally dot
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -215,7 +240,6 @@ fun CameraScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                // Tally dot: Green=LIVE, Yellow=Preview, Hidden=Off
                 Box(
                     modifier = Modifier
                         .size(18.dp)
@@ -227,13 +251,13 @@ fun CameraScreen(
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        uiState.selectedFrameRate.displayName,
+                        "${currentFps}fps",
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "${uiState.actualResolution.height}p" + " • " + viewModel.getFormattedAspectRatio(),
+                        if (currentHeight > 0) "${currentHeight}p" else "---",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -241,7 +265,6 @@ fun CameraScreen(
             }
         }
 
-        // Main streaming button (center bottom)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -265,13 +288,6 @@ fun CameraScreen(
             }
         }
 
-        // Menu button (bottom right)
-        var showMenu by remember { mutableStateOf(false) }
-        var showCameraSelector by remember { mutableStateOf(false) }
-        var showFrameRateSelector by remember { mutableStateOf(false) }
-        var showSettings by remember { mutableStateOf(false) }
-        var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
-
         IconButton(
             onClick = { showMenu = true },
             modifier = Modifier
@@ -287,55 +303,24 @@ fun CameraScreen(
             )
         }
 
-        // Menu dialog
         if (showMenu) {
-            MenuDialog(
-                selectedCameraName = uiState.selectedCamera?.name ?: "Select Camera",
-                selectedFrameRate = uiState.selectedFrameRate,
-                onCameraClick = {
+            SimpleMenuDialog(
+                sourceName = uiState.sourceName,
+                onSwitchCameraClick = {
+                    viewModel.switchScreenMode()
                     showMenu = false
-                    showCameraSelector = true
-                },
-                onFrameRateClick = {
-                    showMenu = false
-                    showFrameRateSelector = true
                 },
                 onSettingsClick = {
                     showMenu = false
                     showSettings = true
+                    sourceNameInput = uiState.sourceName
                 },
                 onDismiss = { showMenu = false }
             )
         }
 
-        // Camera selector
-        if (showCameraSelector) {
-            CameraSelectorDialog(
-                cameras = uiState.availableCameras,
-                selectedCamera = uiState.selectedCamera,
-                onCameraSelected = { camera ->
-                    viewModel.selectCamera(camera)
-                    showCameraSelector = false
-                },
-                onDismiss = { showCameraSelector = false }
-            )
-        }
-
-        // Frame rate selector
-        if (showFrameRateSelector) {
-            FrameRateSelectorDialog(
-                selectedFrameRate = uiState.selectedFrameRate,
-                onFrameRateSelected = { frameRate ->
-                    viewModel.selectFrameRate(frameRate)
-                    showFrameRateSelector = false
-                },
-                onDismiss = { showFrameRateSelector = false }
-            )
-        }
-
-        // Settings dialog
         if (showSettings) {
-            SettingsDialog(
+            SimpleSettingsDialog(
                 sourceName = sourceNameInput,
                 onSourceNameChange = { sourceNameInput = it },
                 onSave = {
@@ -350,30 +335,115 @@ fun CameraScreen(
     }
 }
 
-/**
- * Process image and send to NDI
- * Note: isStreaming is passed directly to avoid StateFlow access per frame
- */
-private fun processImageForNDI(
-    imageProxy: ImageProxy,
-    viewModel: CameraViewModel,
-    isStreaming: Boolean
+@Composable
+private fun SimpleMenuDialog(
+    sourceName: String,
+    onSwitchCameraClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    if (!isStreaming) {
-        imageProxy.close()
-        return
-    }
-
-    try {
-        val uyvyData = convertYuvToUyvy(imageProxy.image!!)
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val stride = width * 2  // UYVY has 2 bytes per pixel
-
-        viewModel.sendFrame(uyvyData, width, height, stride)
-    } catch (e: Exception) {
-        Log.e("CameraApp", "Error processing image for NDI: ${e.message}")
-    } finally {
-        imageProxy.close()
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.width(280.dp)
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                SimpleMenuItem(
+                    title = sourceName,
+                    subtitle = "USB Camera",
+                    onClick = onDismiss
+                )
+                SimpleMenuItem(
+                    title = "Switch to Internal Camera",
+                    subtitle = "Change camera type",
+                    onClick = onSwitchCameraClick
+                )
+                SimpleMenuItem(
+                    title = "Settings",
+                    subtitle = "NDI Source Name",
+                    onClick = onSettingsClick
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun SimpleMenuItem(
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(12.dp)
+    ) {
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleSettingsDialog(
+    sourceName: String,
+    onSourceNameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    "Settings",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    "NDI Source Name",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = sourceName,
+                    onValueChange = onSourceNameChange,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onSave) {
+                        Text("Save")
+                    }
+                }
+            }
+        }
+    }
+}
+

@@ -25,3 +25,8 @@ dependencyResolutionManagement {
 rootProject.name = "MyNdiCam"
 include(":app")
 include(":ndi")
+
+// USB Camera Support modules
+include(":libuvc")
+include(":libnative")
+include(":libausbc")

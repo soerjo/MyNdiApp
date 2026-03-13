@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import com.soerjo.myndicam.data.datasource.CameraDataSource
+import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.repository.CameraRepository
 import kotlinx.coroutines.flow.Flow
@@ -14,10 +15,12 @@ import javax.inject.Singleton
 
 /**
  * Implementation of CameraRepository
+ * Combines internal (CameraX) and external (USB) cameras
  */
 @Singleton
 class CameraRepositoryImpl @Inject constructor(
-    private val cameraDataSource: CameraDataSource
+    private val cameraDataSource: CameraDataSource,
+    private val usbCameraDataSource: UsbCameraDataSource
 ) : CameraRepository {
 
     private val TAG = "CameraRepository"
@@ -27,10 +30,17 @@ class CameraRepositoryImpl @Inject constructor(
 
     override suspend fun detectCameras(): List<CameraInfo> {
         return try {
-            val cameras = cameraDataSource.detectAvailableCameras()
-            _availableCameras.value = cameras
-            Log.d(TAG, "Detected ${cameras.size} cameras")
-            cameras
+            // Get internal cameras (CameraX)
+            val internalCameras = cameraDataSource.detectAvailableCameras()
+            
+            // Get USB cameras
+            val usbCameras = usbCameraDataSource.getDetectedCameras()
+            
+            // Combine both lists
+            val allCameras = internalCameras + usbCameras
+            _availableCameras.value = allCameras
+            Log.d(TAG, "Detected ${allCameras.size} cameras (${internalCameras.size} internal, ${usbCameras.size} USB)")
+            allCameras
         } catch (e: Exception) {
             Log.e(TAG, "Failed to detect cameras", e)
             emptyList()

@@ -1,6 +1,7 @@
 package com.soerjo.myndicam.domain.repository
 
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.ScreenMode
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -26,4 +27,14 @@ interface SettingsRepository {
      * Save the frame rate
      */
     suspend fun saveFrameRate(frameRate: FrameRate)
+
+    /**
+     * Get the saved screen mode
+     */
+    fun getScreenMode(): Flow<ScreenMode>
+
+    /**
+     * Save the screen mode
+     */
+    suspend fun saveScreenMode(mode: ScreenMode)
 }

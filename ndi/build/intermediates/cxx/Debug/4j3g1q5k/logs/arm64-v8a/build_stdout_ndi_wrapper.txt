@@ -1,2 +1,0 @@
-ninja: Entering directory `C:\Users\ryoha\AndroidStudioProjects\MyNdiApp\ndi\.cxx\Debug\4j3g1q5k\arm64-v8a'
-ninja: no work to do.
