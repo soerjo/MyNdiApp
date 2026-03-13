@@ -78,9 +78,6 @@ class UsbCameraDataSource @Inject constructor(
                         _detectedUsbCameras.value = current
                         Log.d(TAG, "USB camera added to list: ${cameraInfo.name}")
                         
-                        // Auto-request permission as recommended in library docs
-                        requestPermission(it)
-                        
                         externalListener?.onAttachDev(it)
                     }
                 }

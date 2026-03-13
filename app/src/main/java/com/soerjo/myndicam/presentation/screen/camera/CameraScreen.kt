@@ -62,11 +62,10 @@ import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 
 @Composable
 fun CameraScreen() {
-    InternalCameraScreen()
-//    when (Constants.SCREEN_MODE) {
-//        1 -> UsbCameraScreen()
-//        2 -> InternalCameraScreen()
-//    }
+    when (Constants.SCREEN_MODE) {
+        1 -> UsbCameraScreen()
+        2 -> InternalCameraScreen()
+    }
 }
 
 @Composable

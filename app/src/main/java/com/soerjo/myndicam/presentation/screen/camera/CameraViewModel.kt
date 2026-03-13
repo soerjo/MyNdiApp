@@ -279,30 +279,7 @@ class CameraViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(usbConnectionState = state)
     }
 
-    /**
-     * Request permission for USB device
-     * If permission already granted, triggers connection flow
-     */
-    fun requestUsbPermission(device: UsbDevice) {
-        // Don't reset state if already connected
-        if (_uiState.value.usbConnectionState == UsbConnectionState.Connected) {
-            Log.d(TAG, "Already connected, skipping permission request")
-            return
-        }
-        
-        _uiState.value = _uiState.value.copy(usbConnectionState = UsbConnectionState.Connecting)
-        Log.d(TAG, "Requesting USB permission for ${device.deviceName}")
-        
-        // Check if already has permission - if so, still need to trigger connection
-        if (usbCameraDataSource.hasPermission(device)) {
-            Log.d(TAG, "Permission already granted")
-            // Permission is already granted, but we need to request again to trigger onConnectDev
-            // The USB monitor will call onConnectDev when permission is granted
-            usbCameraDataSource.requestPermission(device)
-        } else {
-            usbCameraDataSource.requestPermission(device)
-        }
-    }
+
 
     /**
      * Create USB camera controller for a device

@@ -24,22 +24,15 @@
         android:theme="@style/Theme.MyNdiCam">
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="sensorLandscape"
             android:exported="true"
             android:label="@string/app_name"
-            android:screenOrientation="landscape"
             android:theme="@style/Theme.MyNdiCam">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- USB device attachment intent filter -->
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-            </intent-filter>
-            <meta-data
-                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/usb_device_filter" />
         </activity>
     </application>
 
