@@ -64,7 +64,7 @@ fun InternalCameraPreview(
         modifier = modifier
     )
 
-    DisposableEffect(cameraSelector) {
+    DisposableEffect(cameraSelector, targetWidth, targetHeight) {
         val selectedCamera = cameraSelector
         Log.d("InternalCameraPreview", "Binding camera: $selectedCamera")
 
@@ -136,16 +136,12 @@ fun InternalCameraPreview(
                         val uData = if (uBuffer.hasArray()) uBuffer.array() else ByteArray(uBuffer.remaining()).also { uBuffer.get(it) }
                         val vData = if (vBuffer.hasArray()) vBuffer.array() else ByteArray(vBuffer.remaining()).also { vBuffer.get(it) }
 
-                        // Create plane info with proper stride handling
                         val yPlaneInfo = YuvPlaneInfo(yData, yRowStride, yPixelStride)
                         val uPlaneInfo = YuvPlaneInfo(uData, uRowStride, uPixelStride)
                         val vPlaneInfo = YuvPlaneInfo(vData, vRowStride, vPixelStride)
 
-                        // Pack YUV planes into single ByteArray (removes stride padding)
-                        val packedData = packYuvData(yData, uData, vData, width, height, yRowStride, uRowStride, vRowStride)
-
                         val frameInfo = FrameInfo(
-                            data = packedData,
+                            data = null,
                             yuvPlanes = YuvPlanes(yPlaneInfo, uPlaneInfo, vPlaneInfo),
                             width = width,
                             height = height,
@@ -182,50 +178,4 @@ fun InternalCameraPreview(
     }
 }
 
-/**
- * Pack YUV planes into single ByteArray for conversion
- * Layout: [Y plane | U plane | V plane]
- *
- * Removes stride padding from ImageProxy planes to produce packed data
- * suitable for conversion functions that assume contiguous memory.
- */
-fun packYuvData(
-    yData: ByteArray,
-    uData: ByteArray,
-    vData: ByteArray,
-    width: Int,
-    height: Int,
-    yRowStride: Int,
-    uRowStride: Int,
-    vRowStride: Int
-): ByteArray {
-    val ySize = width * height
-    val uvSize = ySize / 4
-    val packedData = ByteArray(ySize + uvSize * 2)
 
-    // Copy Y plane (full resolution)
-    var destIdx = 0
-    for (y in 0 until height) {
-        val srcIdx = y * yRowStride
-        System.arraycopy(yData, srcIdx, packedData, destIdx, width)
-        destIdx += width
-    }
-
-    // Copy U plane (subsampled)
-    val uvHeight = height / 2
-    val uvWidth = width / 2
-    for (y in 0 until uvHeight) {
-        val srcIdx = y * uRowStride
-        System.arraycopy(uData, srcIdx, packedData, destIdx, uvWidth)
-        destIdx += uvWidth
-    }
-
-    // Copy V plane (subsampled)
-    for (y in 0 until uvHeight) {
-        val srcIdx = y * vRowStride
-        System.arraycopy(vData, srcIdx, packedData, destIdx, uvWidth)
-        destIdx += uvWidth
-    }
-
-    return packedData
-}

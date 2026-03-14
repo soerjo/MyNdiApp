@@ -139,11 +139,6 @@ private fun convertRgbaToUyvy(rgbaData: ByteArray, width: Int, height: Int): Byt
  * Convert YUV_420_888 to UYVY using explicit plane information
  * Input: YuvPlanes with proper stride handling
  * Output: Packed UYVY format for NDI
- *
- * This function properly handles:
- * - Variable pixelStride and rowStride for each plane
- * - Correct chroma subsampling (4:2:0 to 4:2:2)
- * - Bounds checking to prevent out-of-bounds access
  */
 private fun convertYuv420ToUyvy(yuvPlanes: YuvPlanes, width: Int, height: Int): ByteArray {
     val uyvyData = ByteArray(width * height * 2)
@@ -153,70 +148,29 @@ private fun convertYuv420ToUyvy(yuvPlanes: YuvPlanes, width: Int, height: Int): 
     val uPlane = yuvPlanes.u
     val vPlane = yuvPlanes.v
 
-    val yBufferSize = yPlane.buffer.size
-    val uBufferSize = uPlane.buffer.size
-    val vBufferSize = vPlane.buffer.size
-
-    var sampleU = 0
-    var sampleV = 0
-    var sampleCount = 0
-
     for (y in 0 until height) {
         for (x in 0 until width step 2) {
-            // Get Y values from Y plane
             val yIdx1 = y * yPlane.rowStride + x * yPlane.pixelStride
             val yIdx2 = y * yPlane.rowStride + (x + 1) * yPlane.pixelStride
 
-            val yValue1 = if (yIdx1 < yBufferSize) {
-                yPlane.buffer[yIdx1].toInt() and 0xFF
-            } else {
-                0
-            }
-            val yValue2 = if (yIdx2 < yBufferSize) {
-                yPlane.buffer[yIdx2].toInt() and 0xFF
-            } else {
-                yValue1
-            }
+            val yValue1 = yPlane.buffer[yIdx1].toInt() and 0xFF
+            val yValue2 = yPlane.buffer[yIdx2].toInt() and 0xFF
 
-            // Get UV values from chroma planes (4:2:0 subsampling)
             val uvY = y / 2
             val uvX = x / 2
 
             val uIdx = uvY * uPlane.rowStride + uvX * uPlane.pixelStride
             val vIdx = uvY * vPlane.rowStride + uvX * vPlane.pixelStride
 
-            val uValue = if (uIdx < uBufferSize) {
-                uPlane.buffer[uIdx].toInt() and 0xFF
-            } else {
-                128
-            }
-            val vValue = if (vIdx < vBufferSize) {
-                vPlane.buffer[vIdx].toInt() and 0xFF
-            } else {
-                128
-            }
+            val uValue = uPlane.buffer[uIdx].toInt() and 0xFF
+            val vValue = vPlane.buffer[vIdx].toInt() and 0xFF
 
-            // Sample UV values for logging (first 10 samples)
-            if (sampleCount < 10) {
-                sampleU = uValue
-                sampleV = vValue
-                sampleCount++
-            }
-
-            // Write UYVY format
             uyvyData[uyvyIndex++] = uValue.toByte()
             uyvyData[uyvyIndex++] = yValue1.toByte()
             uyvyData[uyvyIndex++] = vValue.toByte()
             uyvyData[uyvyIndex++] = yValue2.toByte()
         }
     }
-
-    // Log sample UV values for debugging
-    Log.d("FrameConverter", "YUV to UYVY conversion: width=$width, height=$height")
-    Log.d("FrameConverter", "Sample UV values: U=$sampleU, V=$sampleV")
-    Log.d("FrameConverter", "Y plane: size=$yBufferSize, rowStride=${yPlane.rowStride}, pixelStride=${yPlane.pixelStride}")
-    Log.d("FrameConverter", "U plane: size=$uBufferSize, rowStride=${uPlane.rowStride}, pixelStride=${uPlane.pixelStride}")
-    Log.d("FrameConverter", "V plane: size=$vBufferSize, rowStride=${vPlane.rowStride}, pixelStride=${vPlane.pixelStride}")
 
     return uyvyData
 }
@@ -225,8 +179,6 @@ private fun convertYuv420ToUyvy(yuvPlanes: YuvPlanes, width: Int, height: Int): 
  * Convert YUV_420_888 to UYVY (legacy packed format)
  * Input: Packed ByteArray with Y plane, U plane, V plane concatenated (no stride padding)
  * Output: Packed UYVY format for NDI
- *
- * This is a fallback for backward compatibility.
  */
 private fun convertYuv420ToUyvy(yuvData: ByteArray, width: Int, height: Int): ByteArray {
     val ySize = width * height
@@ -237,46 +189,20 @@ private fun convertYuv420ToUyvy(yuvData: ByteArray, width: Int, height: Int): By
 
     val uvWidth = width / 2
 
-    var sampleU = 0
-    var sampleV = 0
-    var sampleCount = 0
-
     for (y in 0 until height) {
         for (x in 0 until width step 2) {
             val yIndex1 = y * width + x
             val yIndex2 = y * width + (x + 1)
-            val yValue1 = if (yIndex1 < yuvData.size) {
-                yuvData[yIndex1].toInt() and 0xFF
-            } else {
-                0
-            }
-            val yValue2 = if (yIndex2 < yuvData.size) {
-                yuvData[yIndex2].toInt() and 0xFF
-            } else {
-                yValue1
-            }
+            val yValue1 = yuvData[yIndex1].toInt() and 0xFF
+            val yValue2 = yuvData[yIndex2].toInt() and 0xFF
 
             val uvY = y / 2
             val uvX = x / 2
             val uIndex = ySize + uvY * uvWidth + uvX
             val vIndex = ySize + uvSize + uvY * uvWidth + uvX
 
-            val uValue = if (uIndex < yuvData.size) {
-                yuvData[uIndex].toInt() and 0xFF
-            } else {
-                128
-            }
-            val vValue = if (vIndex < yuvData.size) {
-                yuvData[vIndex].toInt() and 0xFF
-            } else {
-                128
-            }
-
-            if (sampleCount < 10) {
-                sampleU = uValue
-                sampleV = vValue
-                sampleCount++
-            }
+            val uValue = yuvData[uIndex].toInt() and 0xFF
+            val vValue = yuvData[vIndex].toInt() and 0xFF
 
             uyvyData[uyvyIndex++] = uValue.toByte()
             uyvyData[uyvyIndex++] = yValue1.toByte()
@@ -284,9 +210,6 @@ private fun convertYuv420ToUyvy(yuvData: ByteArray, width: Int, height: Int): By
             uyvyData[uyvyIndex++] = yValue2.toByte()
         }
     }
-
-    Log.d("FrameConverter", "Legacy YUV to UYVY conversion: width=$width, height=$height")
-    Log.d("FrameConverter", "Sample UV values: U=$sampleU, V=$sampleV")
 
     return uyvyData
 }

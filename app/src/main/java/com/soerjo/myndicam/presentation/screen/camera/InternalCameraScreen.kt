@@ -68,7 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.soerjo.myndicam.core.common.Constants
 import com.soerjo.myndicam.data.camera.InternalCameraController
 import com.soerjo.myndicam.domain.model.CameraInfo
-import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
 import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
 import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
@@ -77,17 +77,16 @@ import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 fun InternalCameraScreen(
     viewModel: CameraViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // FPS and resolution from preview component
     var currentFps by remember { mutableIntStateOf(0) }
     var currentHeight by remember { mutableIntStateOf(0) }
+    var currentWidth by remember { mutableIntStateOf(0) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
-    var showFrameRateSelector by remember { mutableStateOf(false) }
+    var showResolutionSelector by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
 
@@ -127,12 +126,10 @@ fun InternalCameraScreen(
         else -> Color.Transparent
     }
 
-    val activity = context as? androidx.fragment.app.FragmentActivity
-    val fragmentManager = activity?.supportFragmentManager
-
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        when (Constants.SCREEN_MODE) {
-            1 ->         InternalCameraPreview(
+//        when (Constants.SCREEN_MODE) {
+//            1 ->
+                InternalCameraPreview(
                 lifecycleOwner = lifecycleOwner,
                 cameraSelector = (uiState.selectedCamera as? CameraInfo.CameraX)?.cameraSelector
                     ?: CameraSelector.DEFAULT_BACK_CAMERA,
@@ -140,6 +137,7 @@ fun InternalCameraScreen(
                     // Update UI tracking
                     currentFps = frameInfo.fps
                     currentHeight = frameInfo.height
+                    currentWidth = frameInfo.width
 
                     if (uiState.isStreaming) {
                         try {
@@ -150,34 +148,34 @@ fun InternalCameraScreen(
                         }
                     }
                 },
-                targetWidth = Constants.TARGET_WIDTH,
-                targetHeight = Constants.TARGET_HEIGHT,
+                targetWidth = uiState.selectedResolution.width,
+                targetHeight = uiState.selectedResolution.height,
                 modifier = Modifier.fillMaxSize()
             )
-            2 ->         UsbCameraPreview(
-                fragmentManager = fragmentManager!!,
-                onFrameData = { frameInfo ->
-                    // Update UI tracking
-                    currentFps = frameInfo.fps
-                    currentHeight = frameInfo.height
-
-                    if (frameInfo.data != null && uiState.isStreaming) {
-                        try {
-                            val uyvyData = convertToUyvy(
-                                frameInfo.data,
-                                frameInfo.width,
-                                frameInfo.height,
-                                frameInfo.format
-                            )
-                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
-                        } catch (e: Exception) {
-                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+//            2 ->         UsbCameraPreview(
+//                fragmentManager = fragmentManager!!,
+//                onFrameData = { frameInfo ->
+//                    // Update UI tracking
+//                    currentFps = frameInfo.fps
+//                    currentHeight = frameInfo.height
+//
+//                    if (frameInfo.data != null && uiState.isStreaming) {
+//                        try {
+//                            val uyvyData = convertToUyvy(
+//                                frameInfo.data,
+//                                frameInfo.width,
+//                                frameInfo.height,
+//                                frameInfo.format
+//                            )
+//                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+//                        } catch (e: Exception) {
+//                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
+//                        }
+//                    }
+//                },
+//                modifier = Modifier.fillMaxSize()
+//            )
+//        }
 
 
 
@@ -238,7 +236,7 @@ fun InternalCameraScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        if (currentHeight > 0) "${currentHeight}p" else "---",
+                        if (currentHeight > 0) "${currentHeight}x${currentWidth}" else "---",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -310,7 +308,7 @@ fun InternalCameraScreen(
         if (showMenu) {
             SimpleMenuDialog(
                 cameraName = uiState.selectedCamera?.name ?: "Select Camera",
-                frameRateName = uiState.selectedFrameRate.displayName,
+                resolutionName = uiState.selectedResolution.displayName,
                 onSwitchCameraClick = {
                     viewModel.switchScreenMode()
                     showMenu = false
@@ -319,9 +317,9 @@ fun InternalCameraScreen(
                     showMenu = false
                     showCameraSelector = true
                 },
-                onFrameRateClick = {
+                onResolutionClick = {
                     showMenu = false
-                    showFrameRateSelector = true
+                    showResolutionSelector = true
                 },
                 onSettingsClick = {
                     showMenu = false
@@ -358,23 +356,23 @@ fun InternalCameraScreen(
             )
         }
 
-        if (showFrameRateSelector) {
-            FrameRateSelectorDialog(
-                selectedFrameRate = uiState.selectedFrameRate,
-                onFrameRateSelected = { frameRate ->
-                    viewModel.selectFrameRate(frameRate)
-                    showFrameRateSelector = false
+        if (showResolutionSelector) {
+            ResolutionSelectorDialog(
+                selectedResolution = uiState.selectedResolution,
+                onResolutionSelected = { resolution ->
+                    viewModel.selectResolution(resolution)
+                    showResolutionSelector = false
                 },
-                onDismiss = { showFrameRateSelector = false }
+                onDismiss = { showResolutionSelector = false }
             )
         }
     }
 }
 
 @Composable
-private fun FrameRateSelectorDialog(
-    selectedFrameRate: FrameRate,
-    onFrameRateSelected: (FrameRate) -> Unit,
+private fun ResolutionSelectorDialog(
+    selectedResolution: Resolution,
+    onResolutionSelected: (Resolution) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -386,17 +384,17 @@ private fun FrameRateSelectorDialog(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "Select Frame Rate",
+                    "Select Resolution",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                FrameRate.values().forEach { frameRate ->
-                    FrameRateOption(
-                        name = frameRate.displayName,
-                        isSelected = selectedFrameRate == frameRate,
-                        onClick = { onFrameRateSelected(frameRate) }
+                Resolution.values().forEach { resolution ->
+                    ResolutionOption(
+                        name = resolution.displayName,
+                        isSelected = selectedResolution == resolution,
+                        onClick = { onResolutionSelected(resolution) }
                     )
                 }
             }
@@ -405,7 +403,7 @@ private fun FrameRateSelectorDialog(
 }
 
 @Composable
-private fun FrameRateOption(
+private fun ResolutionOption(
     name: String,
     isSelected: Boolean,
     onClick: () -> Unit
@@ -424,7 +422,7 @@ private fun FrameRateOption(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Filled.Refresh,
+                imageVector = Icons.Filled.Star,
                 contentDescription = null,
                 tint = if (isSelected)
                     MaterialTheme.colorScheme.primary
@@ -458,10 +456,10 @@ private fun FrameRateOption(
 @Composable
 private fun SimpleMenuDialog(
     cameraName: String,
-    frameRateName: String,
+    resolutionName: String,
     onSwitchCameraClick: () -> Unit,
     onCameraClick: () -> Unit,
-    onFrameRateClick: () -> Unit,
+    onResolutionClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -476,10 +474,10 @@ private fun SimpleMenuDialog(
                     onClick = onCameraClick
                 )
                 MenuItem(
-                    icon = Icons.Filled.Settings,
-                    title = frameRateName,
-                    subtitle = "Frame Rate",
-                    onClick = onFrameRateClick
+                    icon = Icons.Filled.Refresh,
+                    title = resolutionName,
+                    subtitle = "Resolution",
+                    onClick = onResolutionClick
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 8.dp),
