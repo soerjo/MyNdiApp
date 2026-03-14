@@ -79,6 +79,7 @@ fun UsbCameraScreen(
 
     // FPS and resolution from preview component
     var currentFps by remember { mutableIntStateOf(0) }
+    var currentWidth by remember { mutableIntStateOf(0) }
     var currentHeight by remember { mutableIntStateOf(0) }
 
     var showMenu by remember { mutableStateOf(false) }
@@ -121,6 +122,7 @@ fun UsbCameraScreen(
             onFrameData = { frameInfo ->
                 // Update UI tracking
                 currentFps = frameInfo.fps
+                currentWidth = frameInfo.width
                 currentHeight = frameInfo.height
 
                 if (frameInfo.data != null && uiState.isStreaming) {
@@ -137,6 +139,7 @@ fun UsbCameraScreen(
                     }
                 }
             },
+            resolution = uiState.selectedResolution,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -257,7 +260,7 @@ fun UsbCameraScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        if (currentHeight > 0) "${currentHeight}p" else "---",
+                        if (currentWidth > 0 && currentHeight > 0) "${currentWidth}x${currentHeight}" else "---",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -306,6 +309,10 @@ fun UsbCameraScreen(
         if (showMenu) {
             SimpleMenuDialog(
                 sourceName = uiState.sourceName,
+                selectedResolution = uiState.selectedResolution,
+                onResolutionSelected = { resolution ->
+                    viewModel.selectResolution(resolution)
+                },
                 onSwitchCameraClick = {
                     viewModel.switchScreenMode()
                     showMenu = false
@@ -338,6 +345,8 @@ fun UsbCameraScreen(
 @Composable
 private fun SimpleMenuDialog(
     sourceName: String,
+    selectedResolution: com.soerjo.myndicam.domain.model.Resolution,
+    onResolutionSelected: (com.soerjo.myndicam.domain.model.Resolution) -> Unit,
     onSwitchCameraClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDismiss: () -> Unit
@@ -351,6 +360,17 @@ private fun SimpleMenuDialog(
                     title = sourceName,
                     subtitle = "USB Camera",
                     onClick = onDismiss
+                )
+                SimpleMenuSection(title = "Resolution")
+                ResolutionMenuItem(
+                    resolution = com.soerjo.myndicam.domain.model.Resolution.HD,
+                    onClick = { onResolutionSelected(com.soerjo.myndicam.domain.model.Resolution.HD); onDismiss() },
+                    isSelected = selectedResolution == com.soerjo.myndicam.domain.model.Resolution.HD
+                )
+                ResolutionMenuItem(
+                    resolution = com.soerjo.myndicam.domain.model.Resolution.FULL_HD,
+                    onClick = { onResolutionSelected(com.soerjo.myndicam.domain.model.Resolution.FULL_HD); onDismiss() },
+                    isSelected = selectedResolution == com.soerjo.myndicam.domain.model.Resolution.FULL_HD
                 )
                 SimpleMenuItem(
                     title = "Switch to Internal Camera",
@@ -390,6 +410,49 @@ private fun SimpleMenuItem(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleMenuSection(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.Gray,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun ResolutionMenuItem(
+    resolution: com.soerjo.myndicam.domain.model.Resolution,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = resolution.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
+            if (isSelected) {
+                Text(
+                    text = "✓",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }

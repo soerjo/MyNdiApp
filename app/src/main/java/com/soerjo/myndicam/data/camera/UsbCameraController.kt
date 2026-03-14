@@ -196,7 +196,7 @@ class UsbCameraController(
             .setRenderMode(CameraRequest.RenderMode.OPENGL)
             .setDefaultRotateType(RotateType.ANGLE_0)
             .setAudioSource(CameraRequest.AudioSource.NONE)
-            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_YUYV)
+            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_MJPEG)
             .setAspectRatioShow(true)
             .setCaptureRawImage(false)
             .setRawPreviewData(true)  // Enable to get preview callbacks for NDI

@@ -13,6 +13,7 @@ import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.model.CameraType
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.usecase.ObserveSettingsUseCase
 import com.soerjo.myndicam.domain.usecase.SaveSettingsUseCase
@@ -38,6 +39,7 @@ data class CameraUiState(
     val availableCameras: List<CameraInfo> = emptyList(),
     val selectedCamera: CameraInfo? = null,
     val selectedFrameRate: FrameRate = FrameRate.FPS_30,
+    val selectedResolution: Resolution = Resolution.FULL_HD,
     val actualResolution: Size = Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
     val tallyState: TallyState = TallyState(),
     val sourceName: String = Constants.DEFAULT_SOURCE_NAME,
@@ -384,6 +386,11 @@ class CameraViewModel @Inject constructor(
             saveSettingsUseCase.saveFrameRate(frameRate)
             _uiState.value = _uiState.value.copy(selectedFrameRate = frameRate)
         }
+    }
+
+    fun selectResolution(resolution: Resolution) {
+        _uiState.value = _uiState.value.copy(selectedResolution = resolution)
+        Log.d(TAG, "Resolution selected: ${resolution.displayName}")
     }
 
     fun toggleStreaming() {

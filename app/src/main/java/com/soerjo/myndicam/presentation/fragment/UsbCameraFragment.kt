@@ -9,13 +9,21 @@ import com.jiangdg.ausbc.MultiCameraClient
 import com.jiangdg.ausbc.base.CameraFragment
 import com.jiangdg.ausbc.callback.ICameraStateCallBack
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
+import com.jiangdg.ausbc.camera.bean.CameraRequest
+import com.jiangdg.ausbc.render.env.RotateType
 import com.jiangdg.ausbc.widget.AspectRatioTextureView
 import com.jiangdg.ausbc.widget.IAspectRatio
+import com.soerjo.myndicam.domain.model.Resolution
 
 class UsbCameraFragment : CameraFragment() {
 
     private var frameCallback: IPreviewDataCallBack? = null
     private var fragmentId: Int = 0
+    private var selectedResolution: Resolution = Resolution.FULL_HD
+
+    fun setResolution(resolution: Resolution) {
+        selectedResolution = resolution
+    }
 
     fun setFrameCallback(callback: IPreviewDataCallBack) {
         frameCallback = callback
@@ -38,6 +46,20 @@ class UsbCameraFragment : CameraFragment() {
 
     override fun getCameraViewContainer(): ViewGroup {
         return view?.findViewById(com.soerjo.myndicam.R.id.camera_container)!!
+    }
+
+    override fun getCameraRequest(): CameraRequest {
+        return CameraRequest.Builder()
+            .setPreviewWidth(selectedResolution.width)
+            .setPreviewHeight(selectedResolution.height)
+            .setRenderMode(CameraRequest.RenderMode.OPENGL)
+            .setDefaultRotateType(RotateType.ANGLE_0)
+            .setAudioSource(CameraRequest.AudioSource.NONE)
+            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_MJPEG)
+            .setAspectRatioShow(true)
+            .setCaptureRawImage(false)
+            .setRawPreviewData(true)
+            .create()
     }
 
     override fun getGravity(): Int = Gravity.CENTER
