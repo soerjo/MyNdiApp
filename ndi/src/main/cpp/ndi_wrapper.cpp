@@ -309,6 +309,90 @@ JNIEXPORT jlong JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeCreateSend
     return reinterpret_cast<jlong>(sender);
 }
 
+// YUV_420_888 to NV12 conversion
+JNIEXPORT jbyteArray JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeConvertYuv420ToNv12(
+    JNIEnv* env,
+    jobject thiz,
+    jobject y_plane,
+    jint y_row_stride,
+    jint y_pixel_stride,
+    jobject u_plane,
+    jint u_row_stride,
+    jint u_pixel_stride,
+    jobject v_plane,
+    jint v_row_stride,
+    jint v_pixel_stride,
+    jint width,
+    jint height
+) {
+    if (!y_plane || !u_plane || !v_plane || width <= 0 || height <= 0) {
+        LOGE("Invalid YUV plane parameters");
+        return nullptr;
+    }
+
+    void* y_buf = env->GetDirectBufferAddress(y_plane);
+    void* u_buf = env->GetDirectBufferAddress(u_plane);
+    void* v_buf = env->GetDirectBufferAddress(v_plane);
+
+    if (!y_buf || !u_buf || !v_buf) {
+        LOGE("Failed to get direct buffer addresses");
+        return nullptr;
+    }
+
+    const uint8_t* y_plane_data = static_cast<const uint8_t*>(y_buf);
+    const uint8_t* u_plane_data = static_cast<const uint8_t*>(u_buf);
+    const uint8_t* v_plane_data = static_cast<const uint8_t*>(v_buf);
+
+    int y_size = width * height;
+    int uv_width = width / 2;
+    int uv_height = height / 2;
+    int uv_size = uv_width * uv_height * 2;
+
+    jbyteArray nv12_array = env->NewByteArray(y_size + uv_size);
+    if (!nv12_array) {
+        LOGE("Failed to allocate NV12 buffer");
+        return nullptr;
+    }
+
+    jbyte* nv12_data = env->GetByteArrayElements(nv12_array, nullptr);
+    if (!nv12_data) {
+        LOGE("Failed to get NV12 array elements");
+        env->DeleteLocalRef(nv12_array);
+        return nullptr;
+    }
+
+    uint8_t* nv12_dst = reinterpret_cast<uint8_t*>(nv12_data);
+
+    if (y_pixel_stride == 1 && y_row_stride == width) {
+        memcpy(nv12_dst, y_plane_data, y_size);
+    } else {
+        for (int y = 0; y < height; y++) {
+            const uint8_t* src_row = y_plane_data + y * y_row_stride;
+            uint8_t* dst_row = nv12_dst + y * width;
+            for (int x = 0; x < width; x++) {
+                dst_row[x] = src_row[x * y_pixel_stride];
+            }
+        }
+    }
+
+    uint8_t* uv_dst = nv12_dst + y_size;
+    for (int y = 0; y < uv_height; y++) {
+        const uint8_t* u_row = u_plane_data + y * u_row_stride;
+        const uint8_t* v_row = v_plane_data + y * v_row_stride;
+        uint8_t* dst_row = uv_dst + y * width;
+
+        for (int x = 0; x < uv_width; x++) {
+            int src_u_idx = x * u_pixel_stride;
+            int src_v_idx = x * v_pixel_stride;
+            dst_row[x * 2] = u_row[src_u_idx];
+            dst_row[x * 2 + 1] = v_row[src_v_idx];
+        }
+    }
+
+    env->ReleaseByteArrayElements(nv12_array, nv12_data, 0);
+    return nv12_array;
+}
+
 JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFrame(JNIEnv* env, jobject thiz,
                                                         jlong handle,
                                                         jbyteArray data,
@@ -347,9 +431,9 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFra
     // Set up the frame data
     video_frame.p_data = reinterpret_cast<uint8_t*>(frame_data);
 
-    // Set the frame format - use UYVY for optimized performance
-    // UYVY is natively supported by NDI and requires less CPU than BGRA
-    video_frame.FourCC = NDIlib_FourCC_type_UYVY;
+    // Set the frame format - use NV12 for optimized performance
+    // NV12 reduces bandwidth by 25% vs UYVY (12bpp vs 16bpp)
+    video_frame.FourCC = NDIlib_FourCC_type_NV12;
 
     // Set frame rate (default to 30fps)
     video_frame.frame_rate_N = 30000;

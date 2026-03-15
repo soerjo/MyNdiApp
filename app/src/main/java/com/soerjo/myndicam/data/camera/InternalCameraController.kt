@@ -2,6 +2,7 @@ package com.soerjo.myndicam.data.camera
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.media.Image
 import android.util.Log
 import android.util.Size
 import androidx.camera.core.CameraSelector
@@ -12,6 +13,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.soerjo.ndi.NDISender
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -151,71 +153,30 @@ class InternalCameraController(
             val width = image.width
             val height = image.height
 
-            // Log periodically to avoid spam
-            val uyvyData = yuv420ToUyvy(image)
-            val stride = width * 2
+            val yPlane = image.planes[0].buffer
+            val uPlane = image.planes[1].buffer
+            val vPlane = image.planes[2].buffer
 
-            onFrameCallback?.invoke(uyvyData, width, height, stride)
+            val yRowStride = image.planes[0].rowStride
+            val yPixelStride = image.planes[0].pixelStride
+            val uRowStride = image.planes[1].rowStride
+            val uPixelStride = image.planes[1].pixelStride
+            val vRowStride = image.planes[2].rowStride
+            val vPixelStride = image.planes[2].pixelStride
+
+            val nv12Data = NDISender.convertYuv420ToNv12(
+                yPlane, yRowStride, yPixelStride,
+                uPlane, uRowStride, uPixelStride,
+                vPlane, vRowStride, vPixelStride,
+                width, height
+            )
+            val stride = width  // NV12 stride = width (12bpp)
+
+            onFrameCallback?.invoke(nv12Data, width, height, stride)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error processing image: ${e.message}")
+            Log.e(TAG, "Error processing image: ${e.message}", e)
         }
-    }
-
-    /**
-     * Convert YUV_420_888 to UYVY
-     */
-    private fun yuv420ToUyvy(image: android.media.Image): ByteArray {
-        val width = image.width
-        val height = image.height
-        val uyvyData = ByteArray(width * height * 2)
-
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
-
-        val yPixelStride = image.planes[0].pixelStride
-        val yRowStride = image.planes[0].rowStride
-        val uPixelStride = image.planes[1].pixelStride
-        val uRowStride = image.planes[1].rowStride
-        val vPixelStride = image.planes[2].pixelStride
-        val vRowStride = image.planes[2].rowStride
-
-        for (y in 0 until height step 2) {
-            for (x in 0 until width step 2) {
-                // Get Y values
-                val yIndex00 = y * yRowStride + x * yPixelStride
-                val yIndex01 = y * yRowStride + (x + 1) * yPixelStride
-                val yIndex10 = (y + 1) * yRowStride + x * yPixelStride
-                val yIndex11 = (y + 1) * yRowStride + (x + 1) * yPixelStride
-
-                val y00 = yBuffer.get(yIndex00).toInt() and 0xFF
-                val y01 = yBuffer.get(yIndex01).toInt() and 0xFF
-                val y10 = yBuffer.get(yIndex10).toInt() and 0xFF
-                val y11 = yBuffer.get(yIndex11).toInt() and 0xFF
-
-                // Get U and V values (4:2:0 subsampling)
-                val uvIndex = (y / 2) * uRowStride + (x / 2) * uPixelStride
-                val u = uBuffer.get(uvIndex).toInt() and 0xFF
-                val vIndex = (y / 2) * vRowStride + (x / 2) * vPixelStride
-                val v = vBuffer.get(vIndex).toInt() and 0xFF
-
-                // Pack as UYVY: [U Y0 V Y1] for first row
-                val outIdx = y * width * 2 + x * 2
-                uyvyData[outIdx] = u.toByte()
-                uyvyData[outIdx + 1] = y00.toByte()
-                uyvyData[outIdx + 2] = v.toByte()
-                uyvyData[outIdx + 3] = y01.toByte()
-
-                // Pack as UYVY for second row
-                uyvyData[(y + 1) * width * 2 + x * 2] = u.toByte()
-                uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y10.toByte()
-                uyvyData[(y + 1) * width * 2 + (x + 1) * 2] = v.toByte()
-                uyvyData[(y + 1) * width * 2 + (x + 1) * 2 + 1] = y11.toByte()
-            }
-        }
-
-        return uyvyData
     }
 
     /**

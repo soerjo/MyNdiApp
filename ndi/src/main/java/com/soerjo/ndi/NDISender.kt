@@ -128,5 +128,25 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
 
     companion object {
         private const val TAG = "NDISender"
+
+        @JvmStatic
+        fun convertYuv420ToNv12(
+            yPlane: java.nio.ByteBuffer,
+            yRowStride: Int,
+            yPixelStride: Int,
+            uPlane: java.nio.ByteBuffer,
+            uRowStride: Int,
+            uPixelStride: Int,
+            vPlane: java.nio.ByteBuffer,
+            vRowStride: Int,
+            vPixelStride: Int,
+            width: Int,
+            height: Int
+        ): ByteArray = NDIWrapper.nativeConvertYuv420ToNv12(
+            yPlane, yRowStride, yPixelStride,
+            uPlane, uRowStride, uPixelStride,
+            vPlane, vRowStride, vPixelStride,
+            width, height
+        )
     }
 }

@@ -36,6 +36,7 @@ import androidx.camera.camera2.interop.Camera2Interop
 import android.hardware.camera2.CaptureRequest
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import java.util.concurrent.Executors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -187,6 +188,35 @@ fun ExperimentInternalCameraScreen(
                     )
                 }
                 .build()
+
+            imageAnalysis.setAnalyzer(
+                Executors.newSingleThreadExecutor()
+            ) { imageProxy ->
+                val width = imageProxy.width
+                val height = imageProxy.height
+
+                val yPlane = imageProxy.planes[0].buffer
+                val uPlane = imageProxy.planes[1].buffer
+                val vPlane = imageProxy.planes[2].buffer
+
+                val yRowStride = imageProxy.planes[0].rowStride
+                val yPixelStride = imageProxy.planes[0].pixelStride
+                val uRowStride = imageProxy.planes[1].rowStride
+                val uPixelStride = imageProxy.planes[1].pixelStride
+                val vRowStride = imageProxy.planes[2].rowStride
+                val vPixelStride = imageProxy.planes[2].pixelStride
+
+                val nv12Data = com.soerjo.ndi.NDISender.convertYuv420ToNv12(
+                    yPlane, yRowStride, yPixelStride,
+                    uPlane, uRowStride, uPixelStride,
+                    vPlane, vRowStride, vPixelStride,
+                    width, height
+                )
+
+                viewModel.sendFrame(nv12Data, width, height, width)
+
+                imageProxy.close()
+            }
 
             provider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
         }
