@@ -6,7 +6,7 @@ package com.soerjo.myndicam.core.common
 object Constants {
     // Screen mode - change this to switch cameras:
     // 1 = USB camera preview (from UsbCameraScreen)
-    // 2 = Internal camera preview (from InternalCameraScreen)
+    // 2 = Internal camera preview (from ExperimentInternalCameraScreen)
     const val SCREEN_MODE = 1
 
     // Camera settings

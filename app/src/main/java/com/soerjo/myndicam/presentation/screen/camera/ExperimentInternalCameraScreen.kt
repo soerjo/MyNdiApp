@@ -366,10 +366,6 @@ fun ExperimentInternalCameraScreen(
                     viewModel.switchToScreenMode(ScreenMode.USB)
                     showMenu = false
                 },
-                onSwitchToNormalClick = {
-                    viewModel.switchToScreenMode(ScreenMode.INTERNAL)
-                    showMenu = false
-                },
                 onCameraClick = {
                     showMenu = false
                     showCameraSelector = true
@@ -515,7 +511,6 @@ private fun SimpleMenuDialog(
     cameraName: String,
     resolutionName: String,
     onSwitchToUsbClick: () -> Unit,
-    onSwitchToNormalClick: () -> Unit,
     onCameraClick: () -> Unit,
     onResolutionClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -546,12 +541,6 @@ private fun SimpleMenuDialog(
                     title = "Switch to USB Camera",
                     subtitle = "Change camera type",
                     onClick = onSwitchToUsbClick
-                )
-                MenuItem(
-                    icon = Icons.Filled.Refresh,
-                    title = "Switch to Normal Camera",
-                    subtitle = "Change camera type",
-                    onClick = onSwitchToNormalClick
                 )
                 MenuItem(
                     icon = Icons.Filled.Settings,
