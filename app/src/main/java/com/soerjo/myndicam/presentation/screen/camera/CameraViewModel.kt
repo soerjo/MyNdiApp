@@ -416,11 +416,11 @@ class CameraViewModel @Inject constructor(
                 Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
             }
 
-            // Toggle screen mode
-            val newMode = if (_uiState.value.screenMode == ScreenMode.INTERNAL) {
-                ScreenMode.USB
-            } else {
-                ScreenMode.INTERNAL
+            // Cycle screen mode: INTERNAL -> USB -> EXPERIMENT_INTERNAL -> INTERNAL
+            val newMode = when (_uiState.value.screenMode) {
+                ScreenMode.INTERNAL -> ScreenMode.USB
+                ScreenMode.USB -> ScreenMode.EXPERIMENT_INTERNAL
+                ScreenMode.EXPERIMENT_INTERNAL -> ScreenMode.INTERNAL
             }
 
             // Log screen mode transition
@@ -430,6 +430,33 @@ class CameraViewModel @Inject constructor(
             saveSettingsUseCase.saveScreenMode(newMode)
             _uiState.value = _uiState.value.copy(screenMode = newMode)
             Log.d(TAG, "[SCREEN_MODE_SWITCH] Screen mode switched to: $newMode")
+        }
+    }
+
+    fun switchToScreenMode(mode: ScreenMode) {
+        viewModelScope.launch {
+            // Stop streaming if currently active
+            if (isStreaming) {
+                toggleStreaming()
+            }
+
+            // Clean up USB camera when switching away from USB mode
+            if (_uiState.value.screenMode == ScreenMode.USB) {
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] Cleaning up USB camera")
+                activeUsbCameraController?.closeCamera()
+                activeUsbCameraController = null
+                _uiState.value = _uiState.value.copy(usbConnectionState = UsbConnectionState.Idle)
+                usbCameraControllers.clear()
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
+            }
+
+            // Log screen mode transition
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Switching from ${_uiState.value.screenMode} to $mode")
+
+            // Save the new screen mode
+            saveSettingsUseCase.saveScreenMode(mode)
+            _uiState.value = _uiState.value.copy(screenMode = mode)
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Screen mode switched to: $mode")
         }
     }
 

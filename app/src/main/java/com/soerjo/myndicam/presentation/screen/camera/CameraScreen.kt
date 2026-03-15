@@ -67,6 +67,7 @@ fun CameraScreen(viewModel: CameraViewModel = hiltViewModel()) {
     when (uiState.screenMode) {
         ScreenMode.USB -> UsbCameraScreen()
         ScreenMode.INTERNAL -> InternalCameraScreen()
+        ScreenMode.EXPERIMENT_INTERNAL -> ExperimentInternalCameraScreen()
     }
 }
 

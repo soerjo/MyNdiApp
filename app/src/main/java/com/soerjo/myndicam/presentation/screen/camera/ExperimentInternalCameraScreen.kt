@@ -1,8 +1,5 @@
 package com.soerjo.myndicam.presentation.screen.camera
 
-import android.util.Log
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageProxy
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -25,6 +22,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.core.AspectRatio
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import android.util.Size
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.camera2.interop.Camera2Interop
+import android.hardware.camera2.CaptureRequest
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -35,8 +46,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,7 +57,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,28 +72,22 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.soerjo.myndicam.core.common.Constants
-import com.soerjo.myndicam.data.camera.InternalCameraController
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.domain.model.ScreenMode
-import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
-import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
-import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
 
+@OptIn(ExperimentalCamera2Interop::class)
 @Composable
-fun InternalCameraScreen(
+fun ExperimentInternalCameraScreen(
     viewModel: CameraViewModel = hiltViewModel()
 ) {
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-    var currentFps by remember { mutableIntStateOf(0) }
-    var currentHeight by remember { mutableIntStateOf(0) }
-    var currentWidth by remember { mutableIntStateOf(0) }
 
     var showMenu by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
@@ -91,9 +95,22 @@ fun InternalCameraScreen(
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
 
+    var currentFps by remember { mutableIntStateOf(0) }
+    var currentHeight by remember { mutableIntStateOf(0) }
+    var currentWidth by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(uiState.sourceName) {
         sourceNameInput = uiState.sourceName
     }
+
+    LaunchedEffect(uiState.selectedResolution) {
+        currentHeight = uiState.selectedResolution.height
+        currentWidth = uiState.selectedResolution.width
+        currentFps = 60
+    }
+
+    val cameraProvider = remember { ProcessCameraProvider.getInstance(context) }
+    val previewView = remember { PreviewView(context) }
 
     // Initialize internal camera if none selected
     LaunchedEffect(Unit) {
@@ -128,58 +145,50 @@ fun InternalCameraScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-//        when (Constants.SCREEN_MODE) {
-//            1 ->
-                InternalCameraPreview(
-                lifecycleOwner = lifecycleOwner,
-                cameraSelector = (uiState.selectedCamera as? CameraInfo.CameraX)?.cameraSelector
-                    ?: CameraSelector.DEFAULT_BACK_CAMERA,
-                onFrameData = { frameInfo ->
-                    // Update UI tracking
-                    currentFps = frameInfo.fps
-                    currentHeight = frameInfo.height
-                    currentWidth = frameInfo.width
+        AndroidView(
+            factory = { previewView.apply { scaleType = PreviewView.ScaleType.FIT_CENTER } },
+            modifier = Modifier.fillMaxSize()
+        )
 
-                    if (uiState.isStreaming) {
-                        try {
-                            val uyvyData = convertToUyvy(frameInfo)
-                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
-                        } catch (e: Exception) {
-                            Log.e("InternalCameraScreen", "Error sending frame: ${e.message}")
-                        }
-                    }
-                },
-                targetWidth = uiState.selectedResolution.width,
-                targetHeight = uiState.selectedResolution.height,
-                modifier = Modifier.fillMaxSize()
-            )
-//            2 ->         UsbCameraPreview(
-//                fragmentManager = fragmentManager!!,
-//                onFrameData = { frameInfo ->
-//                    // Update UI tracking
-//                    currentFps = frameInfo.fps
-//                    currentHeight = frameInfo.height
-//
-//                    if (frameInfo.data != null && uiState.isStreaming) {
-//                        try {
-//                            val uyvyData = convertToUyvy(
-//                                frameInfo.data,
-//                                frameInfo.width,
-//                                frameInfo.height,
-//                                frameInfo.format
-//                            )
-//                            viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
-//                        } catch (e: Exception) {
-//                            Log.e("UsbCameraScreen", "Error sending frame: ${e.message}")
-//                        }
-//                    }
-//                },
-//                modifier = Modifier.fillMaxSize()
-//            )
-//        }
+        LaunchedEffect(uiState.selectedCamera, uiState.selectedResolution) {
+            val provider = cameraProvider.get()
+            provider.unbindAll()
 
+            val cameraSelector = (uiState.selectedCamera as? CameraInfo.CameraX)?.cameraSelector
+                ?: CameraSelector.DEFAULT_BACK_CAMERA
 
+            val resolutionSelector = ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        Size(uiState.selectedResolution.width, uiState.selectedResolution.height),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                    )
+                )
+                .setAspectRatioStrategy(
+                    AspectRatioStrategy(
+                        AspectRatio.RATIO_16_9,
+                        AspectRatioStrategy.FALLBACK_RULE_AUTO
+                    )
+                )
+                .build()
 
+            val preview = Preview.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .build()
+            preview.setSurfaceProvider(previewView.surfaceProvider)
+
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .apply {
+                    Camera2Interop.Extender(this).setCaptureRequestOption(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(60, 60)
+                    )
+                }
+                .build()
+
+            provider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
+        }
 
         if (uiState.isStreaming && uiState.tallyState.isOnProgram) {
             Box(
@@ -220,30 +229,30 @@ fun InternalCameraScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(dotColor.copy(alpha = dotAlpha))
-                )
-                if (uiState.tallyState.isOnPreview || uiState.tallyState.isOnProgram) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "${currentFps}fps",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        if (currentHeight > 0) "${currentHeight}x${currentWidth}" else "---",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 10.sp
-                    )
-                }
-            }
-        }
+                 Box(
+                     modifier = Modifier
+                         .size(18.dp)
+                         .clip(CircleShape)
+                         .background(dotColor.copy(alpha = dotAlpha))
+                 )
+                 if (uiState.tallyState.isOnPreview || uiState.tallyState.isOnProgram) {
+                     Spacer(modifier = Modifier.width(8.dp))
+                 }
+                 Column(horizontalAlignment = Alignment.End) {
+                     Text(
+                         "${currentFps}fps",
+                         color = Color.White,
+                         fontSize = 12.sp,
+                         fontWeight = FontWeight.SemiBold
+                     )
+                     Text(
+                         if (currentHeight > 0) "${currentHeight}x${currentWidth}" else "---",
+                         color = Color.White.copy(alpha = 0.7f),
+                         fontSize = 10.sp
+                     )
+                 }
+             }
+         }
 
         Box(
             modifier = Modifier
@@ -314,8 +323,8 @@ fun InternalCameraScreen(
                     viewModel.switchToScreenMode(ScreenMode.USB)
                     showMenu = false
                 },
-                onSwitchToExperimentClick = {
-                    viewModel.switchToScreenMode(ScreenMode.EXPERIMENT_INTERNAL)
+                onSwitchToNormalClick = {
+                    viewModel.switchToScreenMode(ScreenMode.INTERNAL)
                     showMenu = false
                 },
                 onCameraClick = {
@@ -463,7 +472,7 @@ private fun SimpleMenuDialog(
     cameraName: String,
     resolutionName: String,
     onSwitchToUsbClick: () -> Unit,
-    onSwitchToExperimentClick: () -> Unit,
+    onSwitchToNormalClick: () -> Unit,
     onCameraClick: () -> Unit,
     onResolutionClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -497,9 +506,9 @@ private fun SimpleMenuDialog(
                 )
                 MenuItem(
                     icon = Icons.Filled.Refresh,
-                    title = "Switch to Experiment Camera",
+                    title = "Switch to Normal Camera",
                     subtitle = "Change camera type",
-                    onClick = onSwitchToExperimentClick
+                    onClick = onSwitchToNormalClick
                 )
                 MenuItem(
                     icon = Icons.Filled.Settings,
