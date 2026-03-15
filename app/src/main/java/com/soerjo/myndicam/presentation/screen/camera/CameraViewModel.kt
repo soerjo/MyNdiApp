@@ -46,6 +46,7 @@ data class CameraUiState(
     val screenMode: ScreenMode = ScreenMode.INTERNAL,
     val isLoading: Boolean = true,
     val usbConnectionState: UsbConnectionState = UsbConnectionState.Idle,
+    val ndiConnectionState: NDIConnectionState = NDIConnectionState.NotInitialized,
     val errorMessage: String? = null
 )
 
@@ -87,14 +88,21 @@ class CameraViewModel @Inject constructor(
             try {
                 // NDI initialization
                 if (!NDIManager.isInitialized()) {
+                    _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Initializing)
                     val initialized = NDIManager.initialize()
-                    if (!initialized) {
+                    if (initialized) {
+                        _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
+                        Log.d(TAG, "NDI initialized successfully")
+                    } else {
                         Log.e(TAG, "Failed to initialize NDI")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
+                            ndiConnectionState = NDIConnectionState.Error("Failed to initialize NDI engine"),
                             errorMessage = "Failed to initialize NDI engine"
                         )
                     }
+                } else {
+                    _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
                 }
 
                 // Detect internal cameras first
@@ -208,6 +216,7 @@ class CameraViewModel @Inject constructor(
 
             // Create new sender
             ndiSender = NDIManager.createSender(sourceName)
+            _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
             Log.d(TAG, "NDI sender created: $sourceName")
 
             // Observe tally state
@@ -218,6 +227,7 @@ class CameraViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create NDI sender: ${e.message}", e)
+            _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Error(e.message ?: "Failed to create NDI sender"))
         }
     }
 

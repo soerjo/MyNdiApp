@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
@@ -221,37 +222,49 @@ fun ExperimentInternalCameraScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(12.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                 Box(
-                     modifier = Modifier
-                         .size(18.dp)
-                         .clip(CircleShape)
-                         .background(dotColor.copy(alpha = dotAlpha))
-                 )
-                 if (uiState.tallyState.isOnPreview || uiState.tallyState.isOnProgram) {
-                     Spacer(modifier = Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                if (uiState.ndiConnectionState !is NDIConnectionState.Ready) {
+                    NDIStatusBadge(
+                        ndiConnectionState = uiState.ndiConnectionState,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                         Box(
+                             modifier = Modifier
+                                 .size(18.dp)
+                                 .clip(CircleShape)
+                                 .background(dotColor.copy(alpha = dotAlpha))
+                         )
+                         if (uiState.tallyState.isOnPreview || uiState.tallyState.isOnProgram) {
+                             Spacer(modifier = Modifier.width(8.dp))
+                         }
+                         Column(horizontalAlignment = Alignment.End) {
+                             Text(
+                                 "${currentFps}fps",
+                                 color = Color.White,
+                                 fontSize = 12.sp,
+                                 fontWeight = FontWeight.SemiBold
+                             )
+                             Text(
+                                 if (currentHeight > 0) "${currentHeight}x${currentWidth}" else "---",
+                                 color = Color.White.copy(alpha = 0.7f),
+                                 fontSize = 10.sp
+                             )
+                         }
+                     }
                  }
-                 Column(horizontalAlignment = Alignment.End) {
-                     Text(
-                         "${currentFps}fps",
-                         color = Color.White,
-                         fontSize = 12.sp,
-                         fontWeight = FontWeight.SemiBold
-                     )
-                     Text(
-                         if (currentHeight > 0) "${currentHeight}x${currentWidth}" else "---",
-                         color = Color.White.copy(alpha = 0.7f),
-                         fontSize = 10.sp
-                     )
-                 }
-             }
+            }
          }
 
         Box(
@@ -694,3 +707,67 @@ private fun SimpleSettingsDialog(
         }
     }
 }
+
+@Composable
+private fun NDIStatusBadge(
+    ndiConnectionState: NDIConnectionState,
+    modifier: Modifier = Modifier
+) {
+    val statusInfo = when (ndiConnectionState) {
+        is NDIConnectionState.NotInitialized -> NDIStatusInfo(
+            backgroundColor = Color(0xFFFFA000),
+            textColor = Color.White,
+            text = "NDI Not Ready"
+        )
+        is NDIConnectionState.Initializing -> NDIStatusInfo(
+            backgroundColor = Color(0xFFFFA000),
+            textColor = Color.White,
+            text = "NDI Initializing"
+        )
+        is NDIConnectionState.Ready -> NDIStatusInfo(
+            backgroundColor = Color.Transparent,
+            textColor = Color.Transparent,
+            text = ""
+        )
+        is NDIConnectionState.Error -> NDIStatusInfo(
+            backgroundColor = Color(0xFFFF5252),
+            textColor = Color.White,
+            text = "NDI Error"
+        )
+    }
+
+    if (statusInfo.text.isNotEmpty()) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(statusInfo.backgroundColor.copy(alpha = 0.9f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = statusInfo.textColor,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    statusInfo.text,
+                    color = statusInfo.textColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
+    }
+}
+
+private data class NDIStatusInfo(
+    val backgroundColor: Color,
+    val textColor: Color,
+    val text: String
+)
