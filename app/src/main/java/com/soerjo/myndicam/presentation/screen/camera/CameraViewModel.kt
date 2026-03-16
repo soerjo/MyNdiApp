@@ -13,6 +13,7 @@ import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
 import com.soerjo.myndicam.domain.model.CameraType
 import com.soerjo.myndicam.domain.model.FrameRate
+import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.usecase.ObserveSettingsUseCase
 import com.soerjo.myndicam.domain.usecase.SaveSettingsUseCase
@@ -38,12 +39,14 @@ data class CameraUiState(
     val availableCameras: List<CameraInfo> = emptyList(),
     val selectedCamera: CameraInfo? = null,
     val selectedFrameRate: FrameRate = FrameRate.FPS_30,
+    val selectedResolution: Resolution = Resolution.FULL_HD,
     val actualResolution: Size = Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
     val tallyState: TallyState = TallyState(),
     val sourceName: String = Constants.DEFAULT_SOURCE_NAME,
     val screenMode: ScreenMode = ScreenMode.INTERNAL,
     val isLoading: Boolean = true,
     val usbConnectionState: UsbConnectionState = UsbConnectionState.Idle,
+    val ndiConnectionState: NDIConnectionState = NDIConnectionState.NotInitialized,
     val errorMessage: String? = null
 )
 
@@ -85,14 +88,21 @@ class CameraViewModel @Inject constructor(
             try {
                 // NDI initialization
                 if (!NDIManager.isInitialized()) {
+                    _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Initializing)
                     val initialized = NDIManager.initialize()
-                    if (!initialized) {
+                    if (initialized) {
+                        _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
+                        Log.d(TAG, "NDI initialized successfully")
+                    } else {
                         Log.e(TAG, "Failed to initialize NDI")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
+                            ndiConnectionState = NDIConnectionState.Error("Failed to initialize NDI engine"),
                             errorMessage = "Failed to initialize NDI engine"
                         )
                     }
+                } else {
+                    _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
                 }
 
                 // Detect internal cameras first
@@ -206,6 +216,7 @@ class CameraViewModel @Inject constructor(
 
             // Create new sender
             ndiSender = NDIManager.createSender(sourceName)
+            _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
             Log.d(TAG, "NDI sender created: $sourceName")
 
             // Observe tally state
@@ -216,6 +227,7 @@ class CameraViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create NDI sender: ${e.message}", e)
+            _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Error(e.message ?: "Failed to create NDI sender"))
         }
     }
 
@@ -386,6 +398,11 @@ class CameraViewModel @Inject constructor(
         }
     }
 
+    fun selectResolution(resolution: Resolution) {
+        _uiState.value = _uiState.value.copy(selectedResolution = resolution)
+        Log.d(TAG, "Resolution selected: ${resolution.displayName}")
+    }
+
     fun toggleStreaming() {
         isStreaming = !isStreaming
         _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
@@ -409,11 +426,11 @@ class CameraViewModel @Inject constructor(
                 Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
             }
 
-            // Toggle screen mode
-            val newMode = if (_uiState.value.screenMode == ScreenMode.INTERNAL) {
-                ScreenMode.USB
-            } else {
-                ScreenMode.INTERNAL
+            // Cycle screen mode: INTERNAL -> USB -> EXPERIMENT_INTERNAL -> INTERNAL
+            val newMode = when (_uiState.value.screenMode) {
+                ScreenMode.INTERNAL -> ScreenMode.USB
+                ScreenMode.USB -> ScreenMode.EXPERIMENT_INTERNAL
+                ScreenMode.EXPERIMENT_INTERNAL -> ScreenMode.INTERNAL
             }
 
             // Log screen mode transition
@@ -423,6 +440,33 @@ class CameraViewModel @Inject constructor(
             saveSettingsUseCase.saveScreenMode(newMode)
             _uiState.value = _uiState.value.copy(screenMode = newMode)
             Log.d(TAG, "[SCREEN_MODE_SWITCH] Screen mode switched to: $newMode")
+        }
+    }
+
+    fun switchToScreenMode(mode: ScreenMode) {
+        viewModelScope.launch {
+            // Stop streaming if currently active
+            if (isStreaming) {
+                toggleStreaming()
+            }
+
+            // Clean up USB camera when switching away from USB mode
+            if (_uiState.value.screenMode == ScreenMode.USB) {
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] Cleaning up USB camera")
+                activeUsbCameraController?.closeCamera()
+                activeUsbCameraController = null
+                _uiState.value = _uiState.value.copy(usbConnectionState = UsbConnectionState.Idle)
+                usbCameraControllers.clear()
+                Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
+            }
+
+            // Log screen mode transition
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Switching from ${_uiState.value.screenMode} to $mode")
+
+            // Save the new screen mode
+            saveSettingsUseCase.saveScreenMode(mode)
+            _uiState.value = _uiState.value.copy(screenMode = mode)
+            Log.d(TAG, "[SCREEN_MODE_SWITCH] Screen mode switched to: $mode")
         }
     }
 

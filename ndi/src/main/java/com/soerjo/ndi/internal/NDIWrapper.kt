@@ -1,6 +1,7 @@
 package com.soerjo.ndi.internal
 
 import android.util.Log
+import java.nio.ByteBuffer
 
 /**
  * NDI Native Wrapper (Internal)
@@ -17,7 +18,7 @@ import android.util.Log
  *
  * This is an internal API and should not be used directly. Use NDISender instead.
  */
-internal object NDIWrapper {
+object NDIWrapper {
     private const val TAG = "NDIWrapper"
     private var isInitialized = false
     private var nativeHandle: Long = 0
@@ -83,6 +84,38 @@ internal object NDIWrapper {
      * @return true if successful, false otherwise
      */
     external fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean
+
+    /**
+     * Convert YUV_420_888 format to NV12 format
+     * Uses native NEON-optimized conversion for maximum performance
+     *
+     * @param yPlane Y plane ByteBuffer
+     * @param yRowStride Y plane row stride in bytes
+     * @param yPixelStride Y plane pixel stride
+     * @param uPlane U plane ByteBuffer
+     * @param uRowStride U plane row stride in bytes
+     * @param uPixelStride U plane pixel stride
+     * @param vPlane V plane ByteBuffer
+     * @param vRowStride V plane row stride in bytes
+     * @param vPixelStride V plane pixel stride
+     * @param width Frame width
+     * @param height Frame height
+     * @return NV12 format ByteArray (Y plane + interleaved UV plane)
+     */
+    @JvmStatic
+    external fun nativeConvertYuv420ToNv12(
+        yPlane: java.nio.ByteBuffer,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uPlane: java.nio.ByteBuffer,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vPlane: java.nio.ByteBuffer,
+        vRowStride: Int,
+        vPixelStride: Int,
+        width: Int,
+        height: Int
+    ): ByteArray
 
     /**
      * Destroy an NDI sender

@@ -93,11 +93,13 @@ class UsbCameraController(
                         try {
                             when (format) {
                                 IPreviewDataCallBack.DataFormat.NV21 -> {
-                                    val uyvyData = convertNv21ToUyvy(data, width, height)
-                                    val stride = width * 2
-                                    onFrameCallback?.invoke(uyvyData, width, height, stride)
+                                    val nv12Data = convertNv21ToNv12(data, width, height)
+                                    val stride = width  // NV12 stride = width (12bpp)
+                                    onFrameCallback?.invoke(nv12Data, width, height, stride)
                                 }
                                 IPreviewDataCallBack.DataFormat.RGBA -> {
+                                    // RGBA to NV12 conversion would be needed here
+                                    // For now, skip this format or use as-is
                                     onFrameCallback?.invoke(data, width, height, width * 4)
                                 }
                                 else -> {
@@ -196,7 +198,7 @@ class UsbCameraController(
             .setRenderMode(CameraRequest.RenderMode.OPENGL)
             .setDefaultRotateType(RotateType.ANGLE_0)
             .setAudioSource(CameraRequest.AudioSource.NONE)
-            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_YUYV)
+            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_MJPEG)
             .setAspectRatioShow(true)
             .setCaptureRawImage(false)
             .setRawPreviewData(true)  // Enable to get preview callbacks for NDI
@@ -204,49 +206,33 @@ class UsbCameraController(
     }
 
     /**
-     * Convert NV21 to UYVY
+     * Convert NV21 to NV12
+     * NV21: Y plane + VU interleaved plane
+     * NV12: Y plane + UV interleaved plane (just swap VU to UV!)
      */
-    private fun convertNv21ToUyvy(nv21Data: ByteArray, width: Int, height: Int): ByteArray {
-        val uyvyData = ByteArray(width * height * 2)
-        
+    private fun convertNv21ToNv12(nv21Data: ByteArray, width: Int, height: Int): ByteArray {
+        val nv12Data = ByteArray(width * height * 3 / 2)  // 12bpp
+
         // NV21: Y plane followed by interleaved VU plane
+        // NV12: Y plane followed by interleaved UV plane
+
         val ySize = width * height
         val vuOffset = ySize
+        val uvOffset = ySize
 
-        for (y in 0 until height step 2) {
-            for (x in 0 until width step 2) {
-                // Get Y values for 2x2 block
-                val yIndex00 = y * width + x
-                val yIndex01 = y * width + (x + 1)
-                val yIndex10 = (y + 1) * width + x
-                val yIndex11 = (y + 1) * width + (x + 1)
+        // Copy Y plane (no conversion needed)
+        System.arraycopy(nv21Data, 0, nv12Data, 0, ySize)
 
-                val y00 = nv21Data[yIndex00].toInt() and 0xFF
-                val y01 = nv21Data[yIndex01].toInt() and 0xFF
-                val y10 = nv21Data[yIndex10].toInt() and 0xFF
-                val y11 = nv21Data[yIndex11].toInt() and 0xFF
-
-                // Get VU values (common for 2x2 block in 4:2:0)
-                // In NV21, the UV plane is interleaved V U V U
-                val vuIndex = vuOffset + (y / 2) * width + x
-                val v = nv21Data[vuIndex].toInt() and 0xFF
-                val u = nv21Data[vuIndex + 1].toInt() and 0xFF
-
-                // Pack as UYVY: [U Y0 V Y1] for first row
-                uyvyData[y * width * 2 + x * 2] = u.toByte()
-                uyvyData[y * width * 2 + x * 2 + 1] = y00.toByte()
-                uyvyData[y * width * 2 + (x + 1) * 2] = v.toByte()
-                uyvyData[y * width * 2 + (x + 1) * 2 + 1] = y01.toByte()
-
-                // Pack as UYVY for second row
-                uyvyData[(y + 1) * width * 2 + x * 2] = u.toByte()
-                uyvyData[(y + 1) * width * 2 + x * 2 + 1] = y10.toByte()
-                uyvyData[(y + 1) * width * 2 + (x + 1) * 2] = v.toByte()
-                uyvyData[(y + 1) * width * 2 + (x + 1) * 2 + 1] = y11.toByte()
-            }
+        // Convert VU (NV21) to UV (NV12) - just swap bytes!
+        val uvSize = ySize / 4  // Quarter size for 4:2:0 subsampling
+        for (i in 0 until uvSize step 2) {
+            // NV21 has VU interleaved
+            // NV12 needs UV interleaved
+            nv12Data[uvOffset + i] = nv21Data[vuOffset + i + 1]  // U
+            nv12Data[uvOffset + i + 1] = nv21Data[vuOffset + i]      // V
         }
 
-        return uyvyData
+        return nv12Data
     }
 
     /**

@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentManager
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
+import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
 import java.util.UUID
 
@@ -26,15 +27,16 @@ private var usbCurrentHeight = 0
 fun UsbCameraPreview(
     fragmentManager: FragmentManager,
     onFrameData: (FrameInfo) -> Unit,
+    resolution: Resolution = Resolution.FULL_HD,
     modifier: Modifier = Modifier,
     fragmentId: Int = android.R.id.custom
 ) {
-    Log.d(TAG, "[PREVIEW_INIT] Starting preview")
+    Log.d(TAG, "[PREVIEW_INIT] Starting preview with resolution: ${resolution.displayName}")
 
     var isFragmentInitialized by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        Log.d(TAG, "[PREVIEW_CLEANUP] Starting cleanup")
+    LaunchedEffect(resolution) {
+        Log.d(TAG, "[PREVIEW_CLEANUP] Starting cleanup for resolution change")
 
         try {
             val existingFragment = fragmentManager.findFragmentById(fragmentId)
@@ -68,6 +70,7 @@ fun UsbCameraPreview(
                 Log.d(TAG, "[UPDATE] Creating new fragment, containerId=${fragmentContainer.id}")
 
                 val newFragment = UsbCameraFragment()
+                newFragment.setResolution(resolution)
                 fragmentManager.beginTransaction()
                     .replace(fragmentContainer.id, newFragment)
                     .commitAllowingStateLoss()
@@ -76,7 +79,7 @@ fun UsbCameraPreview(
                 usbFragment = newFragment
                 newFragment.setFrameCallback(createFrameCallback(onFrameData))
                 isFragmentInitialized = true
-                Log.d(TAG, "[UPDATE] Fragment created and callback set")
+                Log.d(TAG, "[UPDATE] Fragment created with ${resolution.displayName}, callback set")
             }
         }
     )
