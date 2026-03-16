@@ -59,7 +59,7 @@ import com.soerjo.myndicam.core.common.Constants
 import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
 import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
-import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
+import com.soerjo.myndicam.core.util.conversion.convertToUyvy
 
 @Composable
 fun CameraScreen(viewModel: CameraViewModel = hiltViewModel()) {

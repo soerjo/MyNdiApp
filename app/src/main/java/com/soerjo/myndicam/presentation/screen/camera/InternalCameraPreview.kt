@@ -23,7 +23,7 @@ import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
 import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
 import com.soerjo.myndicam.presentation.screen.camera.YuvPlanes
 import com.soerjo.myndicam.presentation.screen.camera.YuvPlaneInfo
-import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
+import com.soerjo.myndicam.core.util.conversion.convertToUyvy
 
 @Composable
 fun InternalCameraPreview(
