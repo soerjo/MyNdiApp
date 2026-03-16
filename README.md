@@ -29,11 +29,13 @@ Built with industry-standard practices including Clean Architecture, MVVM, Hilt 
 
 ### Core Features
 - **Live Camera Streaming** - Real-time video streaming via NDI protocol
-- **Multiple Camera Support** - Front, back, and external USB cameras
+- **Multiple Camera Support** - Front, back, and external USB cameras (UVC devices)
 - **Tally Indicators** - Visual feedback for on-air/preview status (green for live, yellow for preview)
 - **Flexible Frame Rates** - 30 FPS (standard) or 60 FPS (smoother motion)
 - **HD Resolution** - 1280x720 (720p) output
 - **Custom Source Names** - Personalize your NDI source name
+- **Settings Persistence** - Save and restore camera and NDI settings
+- **Screen Modes** - Multiple display modes (Fit, Fill, Stretch)
 
 ### Technical Features
 - **Modular Architecture** - NDI functionality in separate reusable module
@@ -42,6 +44,9 @@ Built with industry-standard practices including Clean Architecture, MVVM, Hilt 
 - **Hilt DI** - Type-safe dependency injection
 - **Native Optimization** - UYVY format for efficient streaming (2 bytes/pixel vs 4 for BGRA)
 - **JNI Bridge** - Native NDI SDK integration via Processing.NDI v6.3
+- **USB Camera Support** - UVC (USB Video Class) camera support via native libraries
+- **Multi-Format Conversion** - Convert between YUV_420_888, NV21, RGBA, and UYVY formats
+- **Native Libraries** - libuvc for UVC devices, libnative for utilities
 - **Material 3 Design** - Modern UI with Jetpack Compose
 
 ## Architecture
@@ -50,36 +55,98 @@ Built with industry-standard practices including Clean Architecture, MVVM, Hilt 
 
 ```
 MyNdiCam/
-├── app/                           # Main application module
+├── app/                           # Main application module (Clean Architecture)
 │   ├── presentation/             # UI layer (Compose + ViewModels)
-│   │   ├── MainActivity.kt
-│   │   └── screen/camera/
-│   │       ├── CameraScreen.kt
-│   │       ├── CameraViewModel.kt
-│   │       └── components/
-│   ├── domain/                    # Business logic layer
-│   │   ├── model/                # Domain models
-│   │   ├── repository/           # Repository interfaces
-│   │   └── usecase/              # Use cases
-│   ├── data/                      # Data layer
-│   │   ├── repository/           # Repository implementations
-│   │   └── datasource/           # Data sources
-│   └── core/                      # Core utilities
-│       ├── di/                   # Hilt modules
-│       ├── util/                 # Extension functions
-│       └── common/               # Constants
+│   │   ├── screen/camera/
+│   │   │   ├── CameraScreen.kt
+│   │   │   ├── CameraViewModel.kt
+│   │   │   └── components/
+│   │   │       ├── camera/      # Camera preview components
+│   │   │       ├── controls/    # Control buttons and menus
+│   │   │       ├── dialogs/     # Settings dialogs
+│   │   │       ├── overlay/     # Tally overlay
+│   │   │       └── preview/     # Preview display
+│   │   └── model/               # Presentation models
+│   ├── domain/                   # Business logic layer
+│   │   ├── model/               # Domain models
+│   │   │   ├── CameraInfo.kt    # Sealed class (CameraX/USB)
+│   │   │   ├── CameraType.kt    # Enum (FRONT/BACK/EXTERNAL)
+│   │   │   ├── FrameRate.kt     # Enum (30/60 FPS)
+│   │   │   ├── Resolution.kt    # Resolution model
+│   │   │   ├── CropDimensions.kt
+│   │   │   └── ScreenMode.kt
+│   │   ├── repository/          # Repository interfaces
+│   │   │   ├── CameraRepository.kt
+│   │   │   └── SettingsRepository.kt
+│   │   └── usecase/             # Use cases
+│   │       ├── DetectCamerasUseCase.kt
+│   │       ├── ObserveSettingsUseCase.kt
+│   │       └── SaveSettingsUseCase.kt
+│   ├── data/                     # Data layer
+│   │   ├── camera/
+│   │   │   ├── internal/       # CameraX implementation
+│   │   │   │   ├── InternalCameraController.kt
+│   │   │   │   └── CameraHelper.kt
+│   │   │   ├── usb/            # USB camera implementation
+│   │   │   │   └── UsbCameraController.kt
+│   │   │   └── CameraState.kt
+│   │   ├── datasource/         # Data sources
+│   │   │   ├── CameraDataSource.kt
+│   │   │   └── UsbCameraDataSource.kt
+│   │   ├── repository/         # Repository implementations
+│   │   │   ├── CameraRepositoryImpl.kt
+│   │   │   └── SettingsRepositoryImpl.kt
+│   │   └── model/               # Data models
+│   ├── core/                     # Core utilities
+│   │   ├── di/                  # Hilt modules
+│   │   │   └── AppModule.kt
+│   │   ├── manager/             # Business managers
+│   │   │   ├── NdiManager.kt   # NDI streaming manager
+│   │   │   └── UsbCameraManager.kt
+│   │   ├── util/                # Utility functions
+│   │   │   ├── conversion/     # Frame format converters
+│   │   │   │   ├── FrameConverter.kt
+│   │   │   │   ├── Yuv420Converter.kt
+│   │   │   │   ├── RgbaConverter.kt
+│   │   │   │   └── Nv21Converter.kt
+│   │   │   ├── ImageCropExtensions.kt
+│   │   │   ├── ImageFormatExtensions.kt
+│   │   │   ├── MathExtensions.kt
+│   │   │   └── UsbImageFormatExtensions.kt
+│   │   └── common/              # Constants
+│   │       └── Constants.kt
+│   ├── MainActivity.kt
+│   └── MyNdiApp.kt
 │
-└── ndi/                           # NDI library module (standalone)
-    ├── model/                     # NDI domain models
-    │   └── TallyState.kt
-    ├── internal/                  # Internal implementation
-    │   └── NDIWrapper.kt         # JNI bindings
-    ├── NDIManager.kt             # Public API - lifecycle
-    ├── NDISender.kt              # Public API - sender
-    └── cpp/                       # Native C++ code
-        ├── ndi_wrapper.cpp
-        ├── Include/
-        └── CMakeLists.txt
+├── ndi/                          # NDI library module (standalone)
+│   ├── internal/                 # Internal implementation
+│   │   └── NDIWrapper.kt        # JNI bindings
+│   ├── model/                    # NDI domain models
+│   │   └── TallyState.kt        # Sealed class (OnAir/Preview/None)
+│   ├── NDIManager.kt            # Singleton NDI lifecycle manager
+│   └── NDISender.kt             # NDI sender with frame sending
+│
+├── libausbc/                     # Android USB Camera library
+│   ├── MultiCameraClient.kt     # USB camera client
+│   ├── camera/                   # Camera management
+│   ├── encode/                   # Video encoding
+│   ├── render/                   # Surface rendering
+│   ├── utils/                    # Utility classes
+│   └── widget/                   # Custom widgets
+│
+├── libuvc/                       # UVC native library (JNI)
+│   └── src/main/
+│       ├── java/                 # Java/Kotlin bindings
+│       ├── jni/                  # Native JNI code
+│       │   └── libuvc/          # UVC implementation
+│       └── cpp/                  # C++ code
+│
+└── libnative/                    # Native utilities library
+    └── src/main/cpp/
+        ├── nativelib.cpp         # Native utilities
+        ├── module/               # Native modules
+        ├── proxy/                # Proxy classes
+        └── utils/                # Native utilities
 ```
 
 ### Technology Stack
@@ -90,20 +157,36 @@ MyNdiCam/
 | **Architecture** | Clean Architecture, MVVM |
 | **DI** | Hilt |
 | **Async** | Coroutines, StateFlow |
-| **Camera** | CameraX (1.3.4) |
+| **Camera (Internal)** | CameraX (1.3.4) |
+| **Camera (USB)** | UVC via libausbc, libuvc |
 | **NDI** | Processing.NDI v6.3 (JNI) |
-| **Native** | C++17, CMake |
-| **Build** | Gradle (Kotlin DSL) |
+| **Native** | C++17, CMake, NDK 27 |
+| **Build** | Gradle 8.6 (Kotlin DSL) |
 
 ### Data Flow
 
+**Internal Cameras (CameraX):**
 ```
-Camera → CameraX → YUV_420_888 → UYVY Conversion → NDI Sender → Network
-                                      ↓
-                                  NDI Tally (10Hz polling)
-                                      ↓
-                                  StateFlow → UI Updates
+Camera → CameraX → YUV_420_888 → Frame Conversion → UYVY → NDI Sender → Network
+                                            ↓
+                                      NDI Tally (10Hz)
+                                            ↓
+                                      StateFlow → UI
 ```
+
+**USB Cameras (UVC):**
+```
+USB Camera → libausbc → UVC Frame → Frame Conversion → UYVY → NDI Sender → Network
+                                            ↓
+                                      NDI Tally (10Hz)
+                                            ↓
+                                      StateFlow → UI
+```
+
+**Frame Conversion Pipeline:**
+- YUV_420_888 (CameraX) → RGBA → UYVY (NDI)
+- NV21/MJPEG (USB) → RGBA → UYVY (NDI)
+- Supports cropping and aspect ratio adjustment
 
 ## Installation
 
@@ -124,11 +207,17 @@ The NDI SDK is **not included** in the repository due to licensing. You must man
 
 1. Download NDI SDK from [ndi.video](https://ndi.video/download/)
 2. Extract the downloaded file
-3. Copy `libndi.so` to:
+3. Find `libndi.so` in the extracted SDK
+4. Copy to:
    ```
    ndi/src/main/jniLibs/arm64-v8a/libndi.so
    ndi/src/main/jniLibs/armeabi-v7a/libndi.so
    ```
+
+The NDI module uses:
+- JNI wrapper (`NDIWrapper.kt`) for native bindings
+- CMake build system for native code
+- C++ wrapper (`ndi_wrapper.cpp`) integrating Processing.NDI v6.3
 
 ### Building
 
@@ -150,9 +239,23 @@ cd MyNdiCam
 ### Quick Start
 
 1. **Launch the app** - Grant camera and network permissions
-2. **Select camera** - Tap menu (⋮) → choose camera
-3. **Start streaming** - Tap the play button
-4. **Connect receiver** - Open NDI-compatible software on same network
+2. **Select camera** - Tap menu (⋮) → choose camera (Front, Back, or USB)
+3. **Configure settings** - Set frame rate, source name, and screen mode
+4. **Start streaming** - Tap the play button
+5. **Connect receiver** - Open NDI-compatible software on same network
+
+### USB Camera Support
+
+The app supports UVC (USB Video Class) cameras:
+- Connect USB camera to Android device
+- Grant USB permission when prompted
+- Select from camera menu as "EXTERNAL" camera
+- Works with most webcams and USB capture devices
+
+**Requirements:**
+- Android device with USB OTG support
+- USB OTG adapter/cable (if needed)
+- UVC-compatible camera
 
 ### Receiving the Stream
 
@@ -179,6 +282,7 @@ cd MyNdiCam
 | Camera | Front/Back/External | Menu (⋮) → Current Camera |
 | Frame Rate | 30/60 FPS | Menu (⋮) → Frame Rate |
 | Source Name | Custom text | Menu (⋮) → Source Name |
+| Screen Mode | Fit/Fill/Stretch | Menu (⋮) → Screen Mode |
 
 ### Tally Indicators
 
@@ -188,11 +292,54 @@ cd MyNdiCam
 
 ## Documentation
 
+- [NDI Setup Guide](NDI_SETUP.md) - NDI SDK installation instructions
+- [AGENTS.md](AGENTS.md) - Development guidelines for contributors
 - [Architecture Guide](docs/ARCHITECTURE.md) - Detailed architecture documentation
 - [NDI Module API](docs/API.md) - NDI library API reference
 - [Development Guide](docs/DEVELOPMENT.md) - Contributing and development setup
 - [Modularization Summary](MODULARIZATION_SUMMARY.md) - Module architecture details
 - [Restructuring Summary](RESTRUCTURING_SUMMARY.md) - Clean architecture details
+
+## Module Details
+
+### app Module
+Main application module implementing Clean Architecture:
+
+- **presentation/**: UI layer with Composable screens and ViewModels
+- **domain/**: Business logic with models, use cases, and repository interfaces
+- **data/**: Data layer with repository implementations and data sources
+- **core/**: Utilities, dependency injection, and managers
+
+### ndi Module
+Standalone NDI library module with JNI integration:
+
+- JNI wrapper for Processing.NDI v6.3 SDK
+- Singleton `NDIManager` for lifecycle management
+- `NDISender` for frame transmission and tally polling
+- CMake build system for native C++ code
+
+### libausbc Module
+Android USB Camera library for UVC devices:
+
+- USB camera detection and management
+- UVC (USB Video Class) protocol support
+- Surface rendering and video encoding
+- Multi-camera support
+
+### libuvc Module
+Native UVC library with JNI bindings:
+
+- Native C++ UVC implementation
+- USB device communication
+- Frame capture from USB cameras
+- NDK build integration
+
+### libnative Module
+Native utilities library:
+
+- Common native utilities
+- Proxy classes for native operations
+- C++17 standard library support
 
 ## Network Requirements
 
@@ -206,11 +353,14 @@ cd MyNdiCam
 
 | Permission | Purpose |
 |------------|---------|
-| `CAMERA` | Video capture |
+| `CAMERA` | Video capture (internal cameras) |
+| `USB_HOST` | USB camera support |
 | `ACCESS_WIFI_STATE` | Check connectivity |
 | `INTERNET` | NDI streaming |
 | `ACCESS_NETWORK_STATE` | Monitor network |
 | `CHANGE_WIFI_MULTICAST_STATE` | NDI discovery |
+
+**Note:** USB camera permission is requested at runtime when connecting a USB device.
 
 ## Troubleshooting
 
@@ -245,23 +395,29 @@ We welcome contributions! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for g
 
 ### Project Status
 
-- [x] Clean Architecture implementation
-- [x] Modular design with NDI library
+- [x] Clean Architecture implementation (presentation/domain/data layers)
+- [x] Modular design with NDI library and USB camera support modules
 - [x] MVVM with ViewModel + StateFlow
 - [x] Hilt dependency injection
-- [x] Tally support
-- [x] Multiple camera support
-- [x] Material 3 UI
+- [x] NDI Tally support with 10Hz polling
+- [x] Multiple camera support (CameraX internal + USB UVC external)
+- [x] Material 3 UI with Jetpack Compose
+- [x] Settings persistence
+- [x] Multiple screen modes (Fit/Fill/Stretch)
+- [x] Frame format conversion pipeline
 
 ### Roadmap
 
 - [ ] Audio streaming support
-- [ ] Adjustable resolution
+- [ ] Adjustable resolution (1080p, 480p)
 - [ ] NDI discovery UI
 - [ ] Multiple concurrent streams
 - [ ] NDI receiver functionality
 - [ ] Unit tests
 - [ ] Instrumentation tests
+- [ ] Advanced camera controls (exposure, focus, white balance)
+- [ ] Video codec selection (H.264, H.265)
+- [ ] Network bandwidth optimization
 
 ## License
 
@@ -273,6 +429,8 @@ This project uses the NDI SDK which is subject to NewTek's license terms. Please
 - **CameraX** by Google - Modern camera API
 - **Jetpack Compose** - Modern UI toolkit
 - **Hilt** - Dependency injection for Android
+- **libausbc** by jiangdg - Android USB Camera library
+- **libuvc** - UVC (USB Video Class) library implementation
 
 ## References
 

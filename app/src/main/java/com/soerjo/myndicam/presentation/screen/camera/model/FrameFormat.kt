@@ -1,4 +1,4 @@
-package com.soerjo.myndicam.presentation.screen.camera
+package com.soerjo.myndicam.presentation.screen.camera.model
 
 enum class FrameFormat {
     NV21,       // USB camera format

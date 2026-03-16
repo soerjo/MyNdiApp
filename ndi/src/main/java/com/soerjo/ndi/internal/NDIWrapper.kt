@@ -75,7 +75,7 @@ object NDIWrapper {
     external fun nativeCreateSender(sourceName: String): Long
 
     /**
-     * Send a video frame via NDI
+     * Send a video frame via NDI (optimized with async send and buffer pooling)
      * @param handle Native handle to the sender
      * @param data Frame data (YUV format)
      * @param width Frame width
@@ -84,6 +84,19 @@ object NDIWrapper {
      * @return true if successful, false otherwise
      */
     external fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean
+
+    /**
+     * Send a video frame via NDI using direct ByteBuffer (zero-copy)
+     * This is the most efficient method for sending frames as it avoids any memory copying.
+     *
+     * @param handle Native handle to the sender
+     * @param buffer Direct ByteBuffer containing frame data
+     * @param width Frame width
+     * @param height Frame height
+     * @param stride Frame stride
+     * @return true if successful, false otherwise
+     */
+    external fun nativeSendFrameDirect(handle: Long, buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean
 
     /**
      * Convert YUV_420_888 format to NV12 format
@@ -113,6 +126,22 @@ object NDIWrapper {
         vPlane: java.nio.ByteBuffer,
         vRowStride: Int,
         vPixelStride: Int,
+        width: Int,
+        height: Int
+    ): ByteArray
+
+    /**
+     * Convert NV21 format to NV12 format (native optimized)
+     * NV21 has VUVU ordering, NV12 has UVUV ordering
+     *
+     * @param nv21Data NV21 format ByteArray
+     * @param width Frame width
+     * @param height Frame height
+     * @return NV12 format ByteArray
+     */
+    @JvmStatic
+    external fun nativeConvertNv21ToNv12(
+        nv21Data: ByteArray,
         width: Int,
         height: Int
     ): ByteArray
@@ -161,6 +190,24 @@ object NDIWrapper {
             return false
         }
         return nativeSendFrame(nativeHandle, data, width, height, stride)
+    }
+
+    /**
+     * Send a video frame using direct ByteBuffer (zero-copy, optimized)
+     * This is the most efficient method - use this when possible.
+     *
+     * @param buffer Direct ByteBuffer containing frame data
+     * @param width Frame width
+     * @param height Frame height
+     * @param stride Frame stride
+     * @return true if successful, false otherwise
+     */
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean {
+        if (nativeHandle == 0L) {
+            Log.w(TAG, "No valid sender handle")
+            return false
+        }
+        return nativeSendFrameDirect(nativeHandle, buffer, width, height, stride)
     }
 
     fun destroySender() {

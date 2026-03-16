@@ -1,7 +1,11 @@
-package com.soerjo.myndicam.presentation.screen.camera
+package com.soerjo.myndicam.presentation.screen.camera.components.preview
 
+import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.*
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -19,32 +23,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
-import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
-import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
-import com.soerjo.myndicam.presentation.screen.camera.YuvPlanes
-import com.soerjo.myndicam.presentation.screen.camera.YuvPlaneInfo
-import com.soerjo.myndicam.presentation.screen.camera.convertToUyvy
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameInfo
+import com.soerjo.myndicam.presentation.screen.camera.model.YuvPlanes
+import com.soerjo.myndicam.presentation.screen.camera.model.YuvPlaneInfo
+import com.soerjo.myndicam.core.util.conversion.convertToUyvy
+import java.util.concurrent.Executors
 
+@OptIn(ExperimentalCamera2Interop::class)
 @Composable
 fun InternalCameraPreview(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     cameraSelector: CameraSelector,
     onFrameData: (FrameInfo) -> Unit,
     modifier: Modifier = Modifier,
-    targetWidth: Int = 1920,
-    targetHeight: Int = 1080
+    targetWidth: Int = 1280,
+    targetHeight: Int = 720
 ) {
     val context = LocalContext.current
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val frameProcessingExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "NDI-Frame-Processor") } }
 
-    // FPS tracking
     var frameCount by remember { mutableIntStateOf(0) }
     var lastFpsTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentFps by remember { mutableIntStateOf(0) }
 
-    // Resolution tracking
     var currentWidth by remember { mutableIntStateOf(0) }
     var currentHeight by remember { mutableIntStateOf(0) }
 
@@ -57,7 +61,7 @@ fun InternalCameraPreview(
     AndroidView(
         factory = { ctx ->
             PreviewView(ctx).apply {
-                scaleType = PreviewView.ScaleType.FILL_CENTER
+                scaleType = PreviewView.ScaleType.FIT_CENTER
                 previewView = this
             }
         },
@@ -69,7 +73,8 @@ fun InternalCameraPreview(
         Log.d("InternalCameraPreview", "Binding camera: $selectedCamera")
 
         try {
-            val cameraProvider = cameraProviderFuture.get()
+            val provider = cameraProviderFuture.get()
+            provider.unbindAll()
 
             val resolutionSelector = ResolutionSelector.Builder()
                 .setResolutionStrategy(
@@ -88,74 +93,71 @@ fun InternalCameraPreview(
 
             val preview = Preview.Builder()
                 .setResolutionSelector(resolutionSelector)
-                .build()
-                .also {
-                    it.setSurfaceProvider(previewView?.surfaceProvider)
-                }
+                .build();
+            preview.setSurfaceProvider(previewView?.surfaceProvider)
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setResolutionSelector(resolutionSelector)
-                .setImageQueueDepth(4)
-                .build()
                 .apply {
-                    setAnalyzer(frameProcessingExecutor) { imageProxy ->
-                        val width = imageProxy.width
-                        val height = imageProxy.height
+                    Camera2Interop.Extender(this).setCaptureRequestOption(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(60, 60)
+                    )
+                }
+                .build()
 
-                        // Update resolution tracking
-                        if (width != currentWidth || height != currentHeight) {
-                            currentWidth = width
-                            currentHeight = height
-                        }
+            imageAnalysis.setAnalyzer(
+                frameProcessingExecutor
+            ) { imageProxy ->
+                val width = imageProxy.width
+                val height = imageProxy.height
 
-                        // Update FPS tracking
-                        frameCount++
-                        val now = System.currentTimeMillis()
-                        if (now - lastFpsTime >= 1000) {
-                            currentFps = frameCount
-                            frameCount = 0
-                            lastFpsTime = now
-                        }
-
-                        // Extract YUV data from ImageProxy
-                        val planes = imageProxy.planes
-                        val yBuffer = planes[0].buffer
-                        val uBuffer = planes[1].buffer
-                        val vBuffer = planes[2].buffer
-
-                        val yRowStride = planes[0].rowStride
-                        val uRowStride = planes[1].rowStride
-                        val vRowStride = planes[2].rowStride
-
-                        val yPixelStride = planes[0].pixelStride
-                        val uPixelStride = planes[1].pixelStride
-                        val vPixelStride = planes[2].pixelStride
-
-                        // Extract to ByteArray
-                        val yData = if (yBuffer.hasArray()) yBuffer.array() else ByteArray(yBuffer.remaining()).also { yBuffer.get(it) }
-                        val uData = if (uBuffer.hasArray()) uBuffer.array() else ByteArray(uBuffer.remaining()).also { uBuffer.get(it) }
-                        val vData = if (vBuffer.hasArray()) vBuffer.array() else ByteArray(vBuffer.remaining()).also { vBuffer.get(it) }
-
-                        val yPlaneInfo = YuvPlaneInfo(yData, yRowStride, yPixelStride)
-                        val uPlaneInfo = YuvPlaneInfo(uData, uRowStride, uPixelStride)
-                        val vPlaneInfo = YuvPlaneInfo(vData, vRowStride, vPixelStride)
-
-                        val frameInfo = FrameInfo(
-                            data = null,
-                            yuvPlanes = YuvPlanes(yPlaneInfo, uPlaneInfo, vPlaneInfo),
-                            width = width,
-                            height = height,
-                            format = FrameFormat.YUV_420_888,
-                            fps = currentFps
-                        )
-
-                        onFrameData(frameInfo)
-                        imageProxy.close()
-                    }
+                if (width != currentWidth || height != currentHeight) {
+                    currentWidth = width
+                    currentHeight = height
                 }
 
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
+                frameCount++
+                val now = System.currentTimeMillis()
+                if (now - lastFpsTime >= 1000) {
+                    currentFps = frameCount
+                    frameCount = 0
+                    lastFpsTime = now
+                }
+
+                val yPlane = imageProxy.planes[0].buffer
+                val uPlane = imageProxy.planes[1].buffer
+                val vPlane = imageProxy.planes[2].buffer
+
+                val yRowStride = imageProxy.planes[0].rowStride
+                val uRowStride = imageProxy.planes[1].rowStride
+                val vRowStride = imageProxy.planes[2].rowStride
+
+                val yPixelStride = imageProxy.planes[0].pixelStride
+                val uPixelStride = imageProxy.planes[1].pixelStride
+                val vPixelStride = imageProxy.planes[2].pixelStride
+
+                val yPlaneInfo = YuvPlaneInfo(byteArrayOf(), yRowStride, yPixelStride)
+                val uPlaneInfo = YuvPlaneInfo(byteArrayOf(), uRowStride, uPixelStride)
+                val vPlaneInfo = YuvPlaneInfo(byteArrayOf(), vRowStride, vPixelStride)
+
+                val frameInfo = FrameInfo(
+                    data = null,
+                    yuvPlanes = YuvPlanes(yPlaneInfo, uPlaneInfo, vPlaneInfo),
+                    directBuffers = Triple(yPlane, uPlane, vPlane),
+                    strides = Triple(yRowStride, uRowStride, vRowStride),
+                    pixelStrides = Triple(yPixelStride, uPixelStride, vPixelStride),
+                    width = width,
+                    height = height,
+                    format = FrameFormat.YUV_420_888,
+                    fps = currentFps
+                )
+
+                onFrameData(frameInfo)
+                imageProxy.close()
+            }
+
+            provider.bindToLifecycle(
                 lifecycleOwner,
                 selectedCamera,
                 preview,
@@ -177,5 +179,3 @@ fun InternalCameraPreview(
         }
     }
 }
-
-

@@ -1,8 +1,5 @@
-package com.soerjo.myndicam.presentation.screen.camera
+package com.soerjo.myndicam.presentation.screen.camera.model
 
-/**
- * NDI connection state for UI tracking
- */
 sealed class NDIConnectionState {
     object NotInitialized : NDIConnectionState()
     object Initializing : NDIConnectionState()

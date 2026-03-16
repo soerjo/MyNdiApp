@@ -96,6 +96,37 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
     }
 
     /**
+     * Send a video frame via NDI using direct ByteBuffer (optimized, zero-copy)
+     *
+     * This is the most efficient method for sending frames. Use direct ByteBuffers
+     * allocated with ByteBuffer.allocateDirect() for best performance.
+     *
+     * @param buffer Direct ByteBuffer containing frame data in UYVY format (2 bytes per pixel)
+     * @param width Frame width
+     * @param height Frame height
+     * @param stride Frame stride (typically width * 2 for UYVY)
+     * @return true if frame was sent successfully, false otherwise
+     */
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean {
+        if (!isRunning) {
+            Log.w(TAG, "Cannot send frame: sender is not running")
+            return false
+        }
+
+        if (!buffer.isDirect) {
+            Log.w(TAG, "Buffer is not direct - this method requires a direct ByteBuffer")
+            return false
+        }
+
+        return try {
+            NDIWrapper.sendFrameDirect(buffer, width, height, stride)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send frame (direct): ${e.message}", e)
+            false
+        }
+    }
+
+    /**
      * Check if the sender is currently running
      */
     fun isRunning(): Boolean = isRunning
@@ -147,6 +178,15 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
             uPlane, uRowStride, uPixelStride,
             vPlane, vRowStride, vPixelStride,
             width, height
+        )
+
+        @JvmStatic
+        fun convertNv21ToNv12(
+            nv21Data: ByteArray,
+            width: Int,
+            height: Int
+        ): ByteArray = NDIWrapper.nativeConvertNv21ToNv12(
+            nv21Data, width, height
         )
     }
 }
