@@ -5,7 +5,7 @@ import android.hardware.usb.UsbDevice
 import android.util.Log
 import com.jiangdg.ausbc.callback.IDeviceConnectCallBack
 import com.jiangdg.usb.USBMonitor
-import com.soerjo.myndicam.data.camera.UsbCameraController
+import com.soerjo.myndicam.data.camera.usb.UsbCameraController
 
 class UsbCameraManager(
     private val context: Context,

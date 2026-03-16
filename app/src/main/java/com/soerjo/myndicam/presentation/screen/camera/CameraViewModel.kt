@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.soerjo.myndicam.core.common.Constants
 import com.soerjo.myndicam.core.util.formatAspectRatio
-import com.soerjo.myndicam.data.camera.UsbCameraController
+import com.soerjo.myndicam.data.camera.usb.UsbCameraController
 import com.soerjo.myndicam.data.datasource.CameraDataSource
 import com.soerjo.myndicam.data.datasource.UsbCameraDataSource
 import com.soerjo.myndicam.domain.model.CameraInfo
@@ -543,7 +543,7 @@ class CameraViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        usbCameraControllers.values.forEach { it.cleanup() }
+        usbCameraControllers.values.forEach { controller -> controller.cleanup() }
         usbCameraControllers.clear()
         usbCameraDataSource.cleanup()
     }

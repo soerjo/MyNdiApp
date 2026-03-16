@@ -1,13 +1,9 @@
-package com.soerjo.myndicam.data.camera
+package com.soerjo.myndicam.data.camera.usb
 
 import android.content.Context
-import android.graphics.SurfaceTexture
 import android.hardware.usb.UsbDevice
 import android.util.Log
 import android.util.Size
-import android.view.Surface
-import android.view.SurfaceView
-import android.view.TextureView
 import com.jiangdg.ausbc.MultiCameraClient
 import com.jiangdg.ausbc.callback.ICameraStateCallBack
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
@@ -15,15 +11,12 @@ import com.jiangdg.ausbc.camera.CameraUVC
 import com.jiangdg.ausbc.camera.bean.CameraRequest
 import com.jiangdg.ausbc.render.env.RotateType
 import com.jiangdg.usb.USBMonitor
+import com.soerjo.myndicam.data.camera.CameraState
+import com.soerjo.myndicam.core.util.conversion.convertNv21ToNv12
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Controller for USB camera operations
- * Handles USB camera lifecycle, frame capture, and NDI streaming
- * refined for the "Linkage" pattern where SurfaceTexture is passed to native code
- */
 class UsbCameraController(
     private val context: Context,
     private val usbDevice: UsbDevice,
@@ -34,35 +27,17 @@ class UsbCameraController(
     private var cameraUVC: CameraUVC? = null
     private var isPreviewing = false
 
-    // Camera state
     private val _cameraState = MutableStateFlow<CameraState>(CameraState.Idle)
     val cameraState: StateFlow<CameraState> = _cameraState.asStateFlow()
 
-    // Preview size
     private val _previewSize = MutableStateFlow(Size(1920, 1080))
     val previewSize: StateFlow<Size> = _previewSize.asStateFlow()
 
-    // Frame callback for NDI streaming
     var onFrameCallback: ((ByteArray, Int, Int, Int) -> Unit)? = null
-    
-    // Frame callback for preview rendering (NV21 format)
+
     var onPreviewFrame: ((ByteArray, Int, Int) -> Unit)? = null
 
-    /**
-     * Camera state
-     */
-    sealed class CameraState {
-        object Idle : CameraState()
-        object Opening : CameraState()
-        object Previewing : CameraState()
-        data class Error(val message: String) : CameraState()
-    }
-
-    /**
-     * Linkage: Connects the Surface to the Native JNI layer
-     * @param previewTarget SurfaceView, SurfaceTexture, or Surface for on-screen preview
-     */
-    open fun openCamera(previewTarget: Any? = null) {
+    fun openCamera(previewTarget: Any? = null) {
         if (isPreviewing) {
             Log.w(TAG, "Camera already previewing")
             return
@@ -77,7 +52,6 @@ class UsbCameraController(
                 setUsbControlBlock(usbControlBlock)
                 Log.d(TAG, "Set USB control block")
 
-                // Add preview data callback for NDI streaming
                 addPreviewDataCallBack(object : IPreviewDataCallBack {
                     override fun onPreviewData(
                         data: ByteArray?,
@@ -89,17 +63,14 @@ class UsbCameraController(
 
                         Log.v(TAG, "Preview data: ${width}x${height}, format=$format")
 
-                        // Process frame for NDI streaming
                         try {
                             when (format) {
                                 IPreviewDataCallBack.DataFormat.NV21 -> {
                                     val nv12Data = convertNv21ToNv12(data, width, height)
-                                    val stride = width  // NV12 stride = width (12bpp)
+                                    val stride = width
                                     onFrameCallback?.invoke(nv12Data, width, height, stride)
                                 }
                                 IPreviewDataCallBack.DataFormat.RGBA -> {
-                                    // RGBA to NV12 conversion would be needed here
-                                    // For now, skip this format or use as-is
                                     onFrameCallback?.invoke(data, width, height, width * 4)
                                 }
                                 else -> {
@@ -142,8 +113,6 @@ class UsbCameraController(
                     }
                 })
 
-                // Link the SurfaceView/TextureView to the Native rendering engine
-                // Using OPENGL mode to render automatically to the surface
                 Log.d(TAG, "Calling openCamera with previewTarget: $previewTarget and request")
                 openCamera(previewTarget, createDefaultRequest())
                 Log.d(TAG, "openCamera returned")
@@ -154,9 +123,6 @@ class UsbCameraController(
         }
     }
 
-    /**
-     * Close the USB camera
-     */
     fun closeCamera() {
         try {
             cameraUVC?.closeCamera()
@@ -168,9 +134,6 @@ class UsbCameraController(
         }
     }
 
-    /**
-     * Update camera resolution
-     */
     fun updateResolution(width: Int, height: Int) {
         try {
             cameraUVC?.updateResolution(width, height)
@@ -180,17 +143,10 @@ class UsbCameraController(
         }
     }
 
-    /**
-     * Get all supported preview sizes
-     */
     fun getSupportedPreviewSizes(): List<Size> {
         return cameraUVC?.getAllPreviewSizes()?.map { Size(it.width, it.height) } ?: emptyList()
     }
 
-    /**
-     * Create default camera request
-     * Use OPENGL mode to get raw preview callbacks for NDI streaming
-     */
     private fun createDefaultRequest(): CameraRequest {
         return CameraRequest.Builder()
             .setPreviewWidth(1920)
@@ -201,50 +157,14 @@ class UsbCameraController(
             .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_MJPEG)
             .setAspectRatioShow(true)
             .setCaptureRawImage(false)
-            .setRawPreviewData(true)  // Enable to get preview callbacks for NDI
+            .setRawPreviewData(true)
             .create()
     }
 
-    /**
-     * Convert NV21 to NV12
-     * NV21: Y plane + VU interleaved plane
-     * NV12: Y plane + UV interleaved plane (just swap VU to UV!)
-     */
-    private fun convertNv21ToNv12(nv21Data: ByteArray, width: Int, height: Int): ByteArray {
-        val nv12Data = ByteArray(width * height * 3 / 2)  // 12bpp
-
-        // NV21: Y plane followed by interleaved VU plane
-        // NV12: Y plane followed by interleaved UV plane
-
-        val ySize = width * height
-        val vuOffset = ySize
-        val uvOffset = ySize
-
-        // Copy Y plane (no conversion needed)
-        System.arraycopy(nv21Data, 0, nv12Data, 0, ySize)
-
-        // Convert VU (NV21) to UV (NV12) - just swap bytes!
-        val uvSize = ySize / 4  // Quarter size for 4:2:0 subsampling
-        for (i in 0 until uvSize step 2) {
-            // NV21 has VU interleaved
-            // NV12 needs UV interleaved
-            nv12Data[uvOffset + i] = nv21Data[vuOffset + i + 1]  // U
-            nv12Data[uvOffset + i + 1] = nv21Data[vuOffset + i]      // V
-        }
-
-        return nv12Data
-    }
-
-    /**
-     * Get USB device
-     */
     fun getUsbDevice(): UsbDevice {
         return usbDevice
     }
 
-    /**
-     * Cleanup resources
-     */
     fun cleanup() {
         closeCamera()
         cameraUVC = null
