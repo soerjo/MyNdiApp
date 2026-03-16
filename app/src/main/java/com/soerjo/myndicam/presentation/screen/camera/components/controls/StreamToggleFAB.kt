@@ -1,5 +1,6 @@
 package com.soerjo.myndicam.presentation.screen.camera.components.controls
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -21,7 +22,7 @@ fun StreamToggleFAB(
 ) {
     FloatingActionButton(
         onClick = onToggle,
-        modifier = modifier.size(72.dp),
+        modifier = modifier.padding(12.dp).size(72.dp),
         containerColor = if (isStreaming)
             MaterialTheme.colorScheme.error
         else

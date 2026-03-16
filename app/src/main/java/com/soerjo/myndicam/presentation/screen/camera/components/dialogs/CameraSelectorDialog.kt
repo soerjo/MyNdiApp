@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,9 +41,15 @@ fun CameraSelectorDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 cameras.forEach { camera ->
+                    val cameraIcon = when (camera) {
+                        is CameraInfo.Usb -> Icons.Filled.Settings
+                        is CameraInfo.CameraX -> Icons.Filled.Star
+                    }
+
                     SelectableOption(
                         label = camera.name,
                         isSelected = selectedCamera?.name == camera.name,
+                        icon = cameraIcon,
                         onClick = { onCameraSelected(camera) }
                     )
                 }

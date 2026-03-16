@@ -19,12 +19,14 @@ import androidx.compose.ui.window.Dialog
 import com.soerjo.myndicam.presentation.screen.camera.components.common.MenuItem
 
 @Composable
-fun MenuDialog(
+fun CameraMenuDialog(
     cameraName: String,
     resolutionName: String,
-    onSwitchToUsbClick: () -> Unit,
+    isUsbMode: Boolean,
     onCameraClick: () -> Unit,
     onResolutionClick: () -> Unit,
+    onSwitchToUsbClick: () -> Unit,
+    onSwitchToInternalClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -50,9 +52,9 @@ fun MenuDialog(
                 )
                 MenuItem(
                     icon = Icons.Filled.Refresh,
-                    title = "Switch to USB Camera",
+                    title = if (isUsbMode) "Switch to Internal Camera" else "Switch to USB Camera",
                     subtitle = "Change camera type",
-                    onClick = onSwitchToUsbClick
+                    onClick = if (isUsbMode) onSwitchToInternalClick else onSwitchToUsbClick
                 )
                 MenuItem(
                     icon = Icons.Filled.Settings,

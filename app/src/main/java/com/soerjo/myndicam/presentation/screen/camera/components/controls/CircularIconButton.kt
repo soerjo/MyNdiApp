@@ -1,6 +1,7 @@
 package com.soerjo.myndicam.presentation.screen.camera.components.controls
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ fun CircularIconButton(
     IconButton(
         onClick = onClick,
         modifier = modifier
+            .padding(12.dp)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.5f))
     ) {

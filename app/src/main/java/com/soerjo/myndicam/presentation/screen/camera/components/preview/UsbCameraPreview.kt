@@ -1,4 +1,4 @@
-package com.soerjo.myndicam.presentation.screen.camera
+package com.soerjo.myndicam.presentation.screen.camera.components.preview
 
 import android.util.Log
 import androidx.compose.runtime.Composable
@@ -13,6 +13,8 @@ import androidx.fragment.app.FragmentManager
 import com.jiangdg.ausbc.callback.IPreviewDataCallBack
 import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.presentation.fragment.UsbCameraFragment
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameInfo
 import java.util.UUID
 
 private const val TAG = "UsbCameraPreview"
@@ -27,7 +29,7 @@ private var usbCurrentHeight = 0
 fun UsbCameraPreview(
     fragmentManager: FragmentManager,
     onFrameData: (FrameInfo) -> Unit,
-    resolution: Resolution = Resolution.FULL_HD,
+    resolution: Resolution = Resolution.HD,
     modifier: Modifier = Modifier,
     fragmentId: Int = android.R.id.custom
 ) {

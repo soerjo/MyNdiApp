@@ -17,6 +17,8 @@ import com.soerjo.myndicam.domain.model.Resolution
 import com.soerjo.myndicam.domain.model.ScreenMode
 import com.soerjo.myndicam.domain.usecase.ObserveSettingsUseCase
 import com.soerjo.myndicam.domain.usecase.SaveSettingsUseCase
+import com.soerjo.myndicam.presentation.screen.camera.model.UsbConnectionState
+import com.soerjo.myndicam.presentation.screen.camera.model.NDIConnectionState
 import com.soerjo.ndi.NDISender
 import com.soerjo.ndi.NDIManager
 import com.soerjo.ndi.model.TallyState
@@ -39,7 +41,7 @@ data class CameraUiState(
     val availableCameras: List<CameraInfo> = emptyList(),
     val selectedCamera: CameraInfo? = null,
     val selectedFrameRate: FrameRate = FrameRate.FPS_30,
-    val selectedResolution: Resolution = Resolution.FULL_HD,
+    val selectedResolution: Resolution = Resolution.HD,
     val actualResolution: Size = Size(Constants.TARGET_WIDTH, Constants.TARGET_HEIGHT),
     val tallyState: TallyState = TallyState(),
     val sourceName: String = Constants.DEFAULT_SOURCE_NAME,
@@ -426,11 +428,10 @@ class CameraViewModel @Inject constructor(
                 Log.d(TAG, "[SCREEN_MODE_USB_EXIT] USB camera closed")
             }
 
-            // Cycle screen mode: INTERNAL -> USB -> EXPERIMENT_INTERNAL -> INTERNAL
+            // Cycle screen mode: INTERNAL -> USB -> INTERNAL
             val newMode = when (_uiState.value.screenMode) {
                 ScreenMode.INTERNAL -> ScreenMode.USB
-                ScreenMode.USB -> ScreenMode.EXPERIMENT_INTERNAL
-                ScreenMode.EXPERIMENT_INTERNAL -> ScreenMode.INTERNAL
+                ScreenMode.USB -> ScreenMode.INTERNAL
             }
 
             // Log screen mode transition
@@ -489,6 +490,17 @@ class CameraViewModel @Inject constructor(
             ndiSender?.sendFrame(data, width, height, stride)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send frame: ${e.message}", e)
+        }
+    }
+
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int) {
+        // Fast path: use cached volatile state to avoid StateFlow read barrier
+        if (!isStreaming) return
+
+        try {
+            ndiSender?.sendFrameDirect(buffer, width, height, stride)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send frame (direct): ${e.message}", e)
         }
     }
 

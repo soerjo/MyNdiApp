@@ -1,7 +1,7 @@
 package com.soerjo.myndicam.core.util.conversion
 
-import com.soerjo.myndicam.presentation.screen.camera.FrameFormat
-import com.soerjo.myndicam.presentation.screen.camera.FrameInfo
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameFormat
+import com.soerjo.myndicam.presentation.screen.camera.model.FrameInfo
 
 fun convertToUyvy(
     data: ByteArray,

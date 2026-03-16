@@ -1,8 +1,5 @@
-package com.soerjo.myndicam.presentation.screen.camera
+package com.soerjo.myndicam.presentation.screen.camera.model
 
-/**
- * USB connection state for UI tracking
- */
 sealed class UsbConnectionState {
     object Idle : UsbConnectionState()
     object Connecting : UsbConnectionState()

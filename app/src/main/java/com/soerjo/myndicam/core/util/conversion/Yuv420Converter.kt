@@ -1,6 +1,6 @@
 package com.soerjo.myndicam.core.util.conversion
 
-import com.soerjo.myndicam.presentation.screen.camera.YuvPlanes
+import com.soerjo.myndicam.presentation.screen.camera.model.YuvPlanes
 
 internal fun convertYuv420ToUyvy(yuvPlanes: YuvPlanes, width: Int, height: Int): ByteArray {
     val uyvyData = ByteArray(width * height * 2)

@@ -1,7 +1,7 @@
 package com.soerjo.myndicam.core.manager
 
 import android.util.Log
-import com.soerjo.myndicam.presentation.screen.camera.NDIConnectionState
+import com.soerjo.myndicam.presentation.screen.camera.model.NDIConnectionState
 import com.soerjo.ndi.NDIManager
 import com.soerjo.ndi.NDISender
 import com.soerjo.ndi.model.TallyState

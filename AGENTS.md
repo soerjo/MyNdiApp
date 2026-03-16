@@ -156,14 +156,52 @@ This file contains guidelines and commands for agentic coding assistants working
   - `presentation/` - UI layer (Compose, ViewModels)
   - `domain/` - Business logic (models, use cases, repository interfaces)
   - `data/` - Data layer (repository implementations, data sources)
-  - `core/` - Utilities (DI, extensions, constants)
+  - `core/` - Utilities (DI, extensions, constants, managers)
 - Repository interfaces in domain, implementations in data
+- Managers in `core/manager/` for complex business logic (NdiManager, UsbCameraManager)
+
+### Multi-Module Architecture
+The project uses a modular design with the following modules:
+
+**app** - Main application module
+- Implements Clean Architecture (presentation/domain/data/core)
+- Depends on ndi and libausbc modules
+- Contains UI, business logic, and data implementations
+
+**ndi** - NDI library module (standalone)
+- JNI wrapper for Processing.NDI v6.3 SDK
+- Public API: NDIManager (singleton), NDISender (frame transmission)
+- Native C++ code built with CMake
+- Independent of app module, can be reused in other projects
+
+**libausbc** - Android USB Camera library
+- Provides USB camera support via UVC protocol
+- Depends on libuvc and libnative modules
+- Handles USB device detection, connection, and frame capture
+- Third-party library (jiangdg/ausbc)
+
+**libuvc** - UVC native library
+- Native implementation of UVC (USB Video Class) protocol
+- JNI bindings for USB camera communication
+- Built with NDK build system (ndk-build)
+- Contains rapidjson for configuration parsing
+
+**libnative** - Native utilities
+- Common native utilities and helper functions
+- Built with CMake
+- Shared by libuvc and other native components
 
 ### Native Code (JNI/C++)
 - Native NDI code: `ndi/src/main/cpp/`
-- Use JNI wrapper pattern (`NDIWrapper.kt`)
+- Native UVC code: `libuvc/src/main/jni/`
+- Native utilities: `libnative/src/main/cpp/`
+- Use JNI wrapper pattern (e.g., `NDIWrapper.kt`)
 - Document memory management and lifecycle
 - Ensure proper cleanup in `release()` methods
+- For ndi module: Use CMake build system
+- For libuvc module: Use NDK build system (ndk-build)
+- NDK version: 27.0.12077973
+- C++ standard: C++17
 
 ### Testing Guidelines
 - JUnit 4 for unit tests
@@ -189,3 +227,28 @@ This file contains guidelines and commands for agentic coding assistants working
 - Supports internal (CameraX) and USB cameras
 - Video format: UYVY (4:2:2 packed), 1280x720 (720p), 16:9 aspect ratio
 - USB camera support requires runtime permissions handling
+- USB cameras use UVC (USB Video Class) protocol via libausbc and libuvc
+- Frame conversion pipeline: YUV_420_888/NV21/MJPEG → RGBA → UYVY for NDI
+
+### USB Camera Architecture
+- USB camera detection via `UsbCameraDataSource`
+- Camera management via `UsbCameraManager` in core/manager
+- USB camera controller in `data/camera/usb/UsbCameraController`
+- Native UVC communication through libausbc and libuvc modules
+- Runtime USB permission handling required
+- Supports multiple USB cameras simultaneously
+
+### Frame Conversion
+- Use converter utilities in `core/util/conversion/`
+- Available converters: FrameConverter, Yuv420Converter, RgbaConverter, Nv21Converter
+- Handle different input formats from various camera sources
+- Convert to UYVY format for NDI transmission
+- Support cropping and aspect ratio adjustments
+- Use extensions in `core/util/` for image format operations
+
+### Camera Types
+- CameraX: Front, Back (internal cameras via CameraX API)
+- USB: External UVC cameras (webcams, capture devices)
+- Both types implement sealed class `CameraInfo` in domain/model
+- Selectable from camera menu in UI
+- SettingsRepository persists camera selection

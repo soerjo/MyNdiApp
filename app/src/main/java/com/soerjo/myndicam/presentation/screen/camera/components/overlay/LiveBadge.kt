@@ -23,7 +23,6 @@ fun LiveBadge(
         Box(
             modifier = modifier
                 .padding(12.dp)
-                .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(Color.Red.copy(alpha = 0.9f))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
