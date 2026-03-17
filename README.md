@@ -10,10 +10,11 @@
 ![DI](https://img.shields.io/badge/DI-Hilt-orange)
 ![Min SDK](https://img.shields.io/badge/min%20SDK-29-green)
 ![Target SDK](https://img.shields.io/badge/target%20SDK-36-green)
+[![Support via Saweria](https://img.shields.io/badge/Support-via-Saweria-FF5E5B)](https://saweria.co/widgets/qr?streamKey=37bac4cf1ea33f4b823b823a84429d82)
 
 **A professional Android NDI camera streamer built with Clean Architecture and modular design**
 
-[Features](#features) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [Documentation](#documentation)
+[Features](#features) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [Documentation](#documentation) • [Support](#support)
 
 </div>
 
@@ -301,11 +302,6 @@ The app supports UVC (USB Video Class) cameras:
 
 - [NDI Setup Guide](NDI_SETUP.md) - NDI SDK installation instructions
 - [AGENTS.md](AGENTS.md) - Development guidelines for contributors
-- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed architecture documentation
-- [NDI Module API](docs/API.md) - NDI library API reference
-- [Development Guide](docs/DEVELOPMENT.md) - Contributing and development setup
-- [Modularization Summary](MODULARIZATION_SUMMARY.md) - Module architecture details
-- [Restructuring Summary](RESTRUCTURING_SUMMARY.md) - Clean architecture details
 
 ## Module Details
 
@@ -405,7 +401,19 @@ Native utilities library:
 
 ## Contributing
 
-We welcome contributions! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for guidelines.
+We welcome contributions! Please see [AGENTS.md](AGENTS.md) for development guidelines.
+
+## Support
+
+If you find MyNdiCam useful, consider supporting its development!
+
+### Saweria
+
+[![Support via Saweria](https://img.shields.io/badge/Donate-via-Saweria-FF5E5B)](https://saweria.co/widgets/qr?streamKey=37bac4cf1ea33f4b823b823a84429d82)
+
+[Donate via Saweria](https://saweria.co/widgets/qr?streamKey=37bac4cf1ea33f4b823b823a84429d82)
+
+Your support helps with continued development, bug fixes, and new features like audio streaming and higher resolution support.
 
 ## Development
 
