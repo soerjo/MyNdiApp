@@ -39,6 +39,7 @@ import com.soerjo.myndicam.presentation.screen.camera.components.controls.Circul
 import com.soerjo.myndicam.presentation.screen.camera.components.controls.StreamToggleFAB
 import com.soerjo.myndicam.presentation.screen.camera.components.dialogs.CameraMenuDialog
 import com.soerjo.myndicam.presentation.screen.camera.components.dialogs.CameraSelectorDialog
+import com.soerjo.myndicam.presentation.screen.camera.components.dialogs.FrameRateSelectorDialog
 import com.soerjo.myndicam.presentation.screen.camera.components.dialogs.ResolutionSelectorDialog
 import com.soerjo.myndicam.presentation.screen.camera.components.dialogs.SettingsDialog
 import com.soerjo.myndicam.presentation.screen.camera.components.overlay.FpsResolutionInfoBox
@@ -73,6 +74,7 @@ private fun UsbCameraContent(
     var showMenu by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
     var showResolutionSelector by remember { mutableStateOf(false) }
+    var showFrameRateSelector by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
 
@@ -102,7 +104,7 @@ private fun UsbCameraContent(
                                         frameInfo.width,
                                         frameInfo.height
                                     )
-                                    viewModel.sendFrame(nv12Data, frameInfo.width, frameInfo.height, frameInfo.width)
+                                    viewModel.sendFrame(nv12Data, frameInfo.width, frameInfo.height, frameInfo.width, uiState.selectedFrameRate.fps)
                                 }
                                 FrameFormat.RGBA -> {
                                     val uyvyData = convertToUyvy(
@@ -111,10 +113,10 @@ private fun UsbCameraContent(
                                         frameInfo.height,
                                         frameInfo.format
                                     )
-                                    viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2)
+                                    viewModel.sendFrame(uyvyData, frameInfo.width, frameInfo.height, frameInfo.width * 2, uiState.selectedFrameRate.fps)
                                 }
                                 FrameFormat.YUV_420_888 -> {
-                                    viewModel.sendFrame(frameInfo.data, frameInfo.width, frameInfo.height, frameInfo.width)
+                                    viewModel.sendFrame(frameInfo.data, frameInfo.width, frameInfo.height, frameInfo.width, uiState.selectedFrameRate.fps)
                                 }
                             }
                         } catch (e: Exception) {
@@ -182,6 +184,7 @@ private fun UsbCameraContent(
             CameraMenuDialog(
                 cameraName = uiState.selectedCamera?.name ?: "USB Camera",
                 resolutionName = uiState.selectedResolution.displayName,
+                frameRateName = uiState.selectedFrameRate.displayName,
                 isUsbMode = true,
                 onCameraClick = {
                     showMenu = false
@@ -190,6 +193,10 @@ private fun UsbCameraContent(
                 onResolutionClick = {
                     showMenu = false
                     showResolutionSelector = true
+                },
+                onFrameRateClick = {
+                    showMenu = false
+                    showFrameRateSelector = true
                 },
                 onSwitchToUsbClick = {},
                 onSwitchToInternalClick = {
@@ -228,6 +235,17 @@ private fun UsbCameraContent(
             )
         }
 
+        if (showFrameRateSelector) {
+            FrameRateSelectorDialog(
+                selectedFrameRate = uiState.selectedFrameRate,
+                onFrameRateSelected = { frameRate ->
+                    viewModel.selectFrameRate(frameRate)
+                    showFrameRateSelector = false
+                },
+                onDismiss = { showFrameRateSelector = false }
+            )
+        }
+
         if (showSettings) {
             SettingsDialog(
                 sourceName = sourceNameInput,
@@ -254,6 +272,7 @@ private fun InternalCameraContent(
     var showMenu by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
     var showResolutionSelector by remember { mutableStateOf(false) }
+    var showFrameRateSelector by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceNameInput by remember { mutableStateOf(uiState.sourceName) }
 
@@ -268,7 +287,6 @@ private fun InternalCameraContent(
     LaunchedEffect(uiState.selectedResolution) {
         currentHeight = uiState.selectedResolution.height
         currentWidth = uiState.selectedResolution.width
-        currentFps = 60
     }
 
     LaunchedEffect(Unit) {
@@ -309,9 +327,9 @@ private fun InternalCameraContent(
                         directBuffer.put(nv12Data)
                         directBuffer.flip()
 
-                        viewModel.sendFrameDirect(directBuffer, frameInfo.width, frameInfo.height, frameInfo.width)
+                        viewModel.sendFrameDirect(directBuffer, frameInfo.width, frameInfo.height, frameInfo.width, uiState.selectedFrameRate.fps)
                     } else if (frameInfo.data != null) {
-                        viewModel.sendFrame(frameInfo.data, frameInfo.width, frameInfo.height, frameInfo.width)
+                        viewModel.sendFrame(frameInfo.data, frameInfo.width, frameInfo.height, frameInfo.width, uiState.selectedFrameRate.fps)
                     }
                 }
             },
@@ -368,6 +386,7 @@ private fun InternalCameraContent(
             CameraMenuDialog(
                 cameraName = uiState.selectedCamera?.name ?: "Internal Camera",
                 resolutionName = uiState.selectedResolution.displayName,
+                frameRateName = uiState.selectedFrameRate.displayName,
                 isUsbMode = false,
                 onCameraClick = {
                     showMenu = false
@@ -376,6 +395,10 @@ private fun InternalCameraContent(
                 onResolutionClick = {
                     showMenu = false
                     showResolutionSelector = true
+                },
+                onFrameRateClick = {
+                    showMenu = false
+                    showFrameRateSelector = true
                 },
                 onSwitchToUsbClick = {
                     viewModel.switchToScreenMode(ScreenMode.USB)
@@ -411,6 +434,17 @@ private fun InternalCameraContent(
                     showResolutionSelector = false
                 },
                 onDismiss = { showResolutionSelector = false }
+            )
+        }
+
+        if (showFrameRateSelector) {
+            FrameRateSelectorDialog(
+                selectedFrameRate = uiState.selectedFrameRate,
+                onFrameRateSelected = { frameRate ->
+                    viewModel.selectFrameRate(frameRate)
+                    showFrameRateSelector = false
+                },
+                onDismiss = { showFrameRateSelector = false }
             )
         }
 

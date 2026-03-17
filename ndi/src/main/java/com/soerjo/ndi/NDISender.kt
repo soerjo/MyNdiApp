@@ -79,16 +79,17 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
      * @param width Frame width
      * @param height Frame height
      * @param stride Frame stride (typically width * 2 for UYVY)
+     * @param fps Frame rate (30 or 60)
      * @return true if frame was sent successfully, false otherwise
      */
-    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int): Boolean {
+    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int, fps: Int = 30): Boolean {
         if (!isRunning) {
             Log.w(TAG, "Cannot send frame: sender is not running")
             return false
         }
 
         return try {
-            NDIWrapper.sendFrame(data, width, height, stride)
+            NDIWrapper.sendFrame(data, width, height, stride, fps)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send frame: ${e.message}", e)
             false
@@ -105,9 +106,10 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
      * @param width Frame width
      * @param height Frame height
      * @param stride Frame stride (typically width * 2 for UYVY)
+     * @param fps Frame rate (30 or 60)
      * @return true if frame was sent successfully, false otherwise
      */
-    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean {
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int, fps: Int = 30): Boolean {
         if (!isRunning) {
             Log.w(TAG, "Cannot send frame: sender is not running")
             return false
@@ -119,7 +121,7 @@ class NDISender(private val sourceName: String) : NDIWrapper.TallyCallback {
         }
 
         return try {
-            NDIWrapper.sendFrameDirect(buffer, width, height, stride)
+            NDIWrapper.sendFrameDirect(buffer, width, height, stride, fps)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send frame (direct): ${e.message}", e)
             false

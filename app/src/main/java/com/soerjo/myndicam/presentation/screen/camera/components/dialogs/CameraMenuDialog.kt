@@ -22,9 +22,11 @@ import com.soerjo.myndicam.presentation.screen.camera.components.common.MenuItem
 fun CameraMenuDialog(
     cameraName: String,
     resolutionName: String,
+    frameRateName: String,
     isUsbMode: Boolean,
     onCameraClick: () -> Unit,
     onResolutionClick: () -> Unit,
+    onFrameRateClick: () -> Unit,
     onSwitchToUsbClick: () -> Unit,
     onSwitchToInternalClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -45,6 +47,12 @@ fun CameraMenuDialog(
                     title = resolutionName,
                     subtitle = "Resolution",
                     onClick = onResolutionClick
+                )
+                MenuItem(
+                    icon = Icons.Filled.Refresh,
+                    title = frameRateName,
+                    subtitle = "Frame Rate",
+                    onClick = onFrameRateClick
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 8.dp),

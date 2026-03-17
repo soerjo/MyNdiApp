@@ -506,7 +506,8 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFra
                                                         jbyteArray data,
                                                         jint width,
                                                         jint height,
-                                                        jint stride) {
+                                                        jint stride,
+                                                        jint fps) {
     if (handle == 0) {
         LOGE("Invalid sender handle");
         return JNI_FALSE;
@@ -554,8 +555,16 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFra
     video_frame.line_stride_in_bytes = stride;
     video_frame.p_data = native_buffer;
     video_frame.FourCC = NDIlib_FourCC_type_NV12;
-    video_frame.frame_rate_N = 30000;
-    video_frame.frame_rate_D = 1001;
+
+    // Set frame rate (30 or 60 FPS)
+    if (fps == 60) {
+        video_frame.frame_rate_N = 60000;
+        video_frame.frame_rate_D = 1001;
+    } else {
+        video_frame.frame_rate_N = 30000;
+        video_frame.frame_rate_D = 1001;
+    }
+
     video_frame.picture_aspect_ratio = 0.0f;
     video_frame.timecode = NDIlib_send_timecode_synthesize;
     video_frame.p_metadata = nullptr;
@@ -579,7 +588,8 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFra
                                                               jobject buffer,
                                                               jint width,
                                                               jint height,
-                                                              jint stride) {
+                                                              jint stride,
+                                                              jint fps) {
     if (handle == 0) {
         LOGE("Invalid sender handle");
         return JNI_FALSE;
@@ -617,8 +627,16 @@ JNIEXPORT jboolean JNICALL Java_com_soerjo_ndi_internal_NDIWrapper_nativeSendFra
     video_frame.line_stride_in_bytes = stride;
     video_frame.p_data = static_cast<uint8_t*>(frame_data);
     video_frame.FourCC = NDIlib_FourCC_type_NV12;
-    video_frame.frame_rate_N = 30000;
-    video_frame.frame_rate_D = 1001;
+
+    // Set frame rate (30 or 60 FPS)
+    if (fps == 60) {
+        video_frame.frame_rate_N = 60000;
+        video_frame.frame_rate_D = 1001;
+    } else {
+        video_frame.frame_rate_N = 30000;
+        video_frame.frame_rate_D = 1001;
+    }
+
     video_frame.picture_aspect_ratio = 0.0f;
     video_frame.timecode = NDIlib_send_timecode_synthesize;
     video_frame.p_metadata = nullptr;

@@ -369,9 +369,11 @@ class CameraViewModel @Inject constructor(
             usbControlBlock = usbControlBlock
         )
 
+        val currentFps = _uiState.value.selectedFrameRate.fps
+
         // Set frame callback for NDI streaming
         controller.onFrameCallback = { data, width, height, stride ->
-            sendFrame(data, width, height, stride)
+            sendFrame(data, width, height, stride, currentFps)
         }
 
         usbCameraControllers[device.deviceId] = controller
@@ -403,12 +405,36 @@ class CameraViewModel @Inject constructor(
     fun selectResolution(resolution: Resolution) {
         _uiState.value = _uiState.value.copy(selectedResolution = resolution)
         Log.d(TAG, "Resolution selected: ${resolution.displayName}")
+
+        if (isStreaming) {
+            recreateNDISenderOnStart()
+        }
     }
 
     fun toggleStreaming() {
-        isStreaming = !isStreaming
-        _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
+        if (!isStreaming) {
+            isStreaming = true
+            _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
+            recreateNDISenderOnStart()
+        } else {
+            isStreaming = false
+            _uiState.value = _uiState.value.copy(isStreaming = isStreaming)
+        }
         Log.d(TAG, "NDI Streaming: ${if (isStreaming) "ON" else "OFF"}")
+    }
+
+    private fun recreateNDISenderOnStart() {
+        viewModelScope.launch {
+            val sourceName = _uiState.value.sourceName
+            ndiSender?.release()
+            ndiSender = NDIManager.createSender(sourceName)
+            _uiState.value = _uiState.value.copy(ndiConnectionState = NDIConnectionState.Ready)
+
+            ndiSender?.tallyState?.collect { tallyState ->
+                _uiState.value = _uiState.value.copy(tallyState = tallyState)
+            }
+            Log.d(TAG, "NDI sender recreated: $sourceName, resolution: ${_uiState.value.selectedResolution.displayName}")
+        }
     }
 
     fun switchScreenMode() {
@@ -482,23 +508,23 @@ class CameraViewModel @Inject constructor(
         }
     }
 
-    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int) {
+    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int, fps: Int) {
         // Fast path: use cached volatile state to avoid StateFlow read barrier
         if (!isStreaming) return
 
         try {
-            ndiSender?.sendFrame(data, width, height, stride)
+            ndiSender?.sendFrame(data, width, height, stride, fps)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send frame: ${e.message}", e)
         }
     }
 
-    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int) {
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int, fps: Int) {
         // Fast path: use cached volatile state to avoid StateFlow read barrier
         if (!isStreaming) return
 
         try {
-            ndiSender?.sendFrameDirect(buffer, width, height, stride)
+            ndiSender?.sendFrameDirect(buffer, width, height, stride, fps)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send frame (direct): ${e.message}", e)
         }

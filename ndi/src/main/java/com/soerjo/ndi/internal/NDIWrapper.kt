@@ -83,7 +83,7 @@ object NDIWrapper {
      * @param stride Frame stride
      * @return true if successful, false otherwise
      */
-    external fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int): Boolean
+    external fun nativeSendFrame(handle: Long, data: ByteArray, width: Int, height: Int, stride: Int, fps: Int): Boolean
 
     /**
      * Send a video frame via NDI using direct ByteBuffer (zero-copy)
@@ -96,7 +96,7 @@ object NDIWrapper {
      * @param stride Frame stride
      * @return true if successful, false otherwise
      */
-    external fun nativeSendFrameDirect(handle: Long, buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean
+    external fun nativeSendFrameDirect(handle: Long, buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int, fps: Int): Boolean
 
     /**
      * Convert YUV_420_888 format to NV12 format
@@ -184,30 +184,31 @@ object NDIWrapper {
         return handle
     }
 
-    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int): Boolean {
+    fun sendFrame(data: ByteArray, width: Int, height: Int, stride: Int, fps: Int): Boolean {
         if (nativeHandle == 0L) {
             Log.w(TAG, "No valid sender handle")
             return false
         }
-        return nativeSendFrame(nativeHandle, data, width, height, stride)
+        return nativeSendFrame(nativeHandle, data, width, height, stride, fps)
     }
 
     /**
      * Send a video frame using direct ByteBuffer (zero-copy, optimized)
-     * This is the most efficient method - use this when possible.
+     * This is most efficient method - use this when possible.
      *
      * @param buffer Direct ByteBuffer containing frame data
      * @param width Frame width
      * @param height Frame height
      * @param stride Frame stride
+     * @param fps Frame rate (30 or 60)
      * @return true if successful, false otherwise
-     */
-    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int): Boolean {
+      */
+    fun sendFrameDirect(buffer: java.nio.ByteBuffer, width: Int, height: Int, stride: Int, fps: Int): Boolean {
         if (nativeHandle == 0L) {
             Log.w(TAG, "No valid sender handle")
             return false
         }
-        return nativeSendFrameDirect(nativeHandle, buffer, width, height, stride)
+        return nativeSendFrameDirect(nativeHandle, buffer, width, height, stride, fps)
     }
 
     fun destroySender() {
