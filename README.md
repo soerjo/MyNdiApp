@@ -31,11 +31,12 @@ Built with industry-standard practices including Clean Architecture, MVVM, Hilt 
 - **Live Camera Streaming** - Real-time video streaming via NDI protocol
 - **Multiple Camera Support** - Front, back, and external USB cameras (UVC devices)
 - **Tally Indicators** - Visual feedback for on-air/preview status (green for live, yellow for preview)
-- **Flexible Frame Rates** - 30 FPS (standard) or 60 FPS (smoother motion)
+- **Dynamic Frame Rate Selection** - Choose 30 or 60 FPS for NDI streaming via menu
 - **HD Resolution** - 1280x720 (720p) output
 - **Custom Source Names** - Personalize your NDI source name
 - **Settings Persistence** - Save and restore camera and NDI settings
 - **Screen Modes** - Multiple display modes (Fit, Fill, Stretch)
+- **Instant NDI Discovery** - NDI sender recreates on stream start for immediate OBS detection
 
 ### Technical Features
 - **Modular Architecture** - NDI functionality in separate reusable module
@@ -44,6 +45,7 @@ Built with industry-standard practices including Clean Architecture, MVVM, Hilt 
 - **Hilt DI** - Type-safe dependency injection
 - **Native Optimization** - UYVY format for efficient streaming (2 bytes/pixel vs 4 for BGRA)
 - **JNI Bridge** - Native NDI SDK integration via Processing.NDI v6.3
+- **Dynamic Frame Rate** - Runtime FPS selection (30/60) with native NDI sender recreation
 - **USB Camera Support** - UVC (USB Video Class) camera support via native libraries
 - **Multi-Format Conversion** - Convert between YUV_420_888, NV21, RGBA, and UYVY formats
 - **Native Libraries** - libuvc for UVC devices, libnative for utilities
@@ -85,7 +87,6 @@ MyNdiCam/
 │   ├── data/                     # Data layer
 │   │   ├── camera/
 │   │   │   ├── internal/       # CameraX implementation
-│   │   │   │   ├── InternalCameraController.kt
 │   │   │   │   └── CameraHelper.kt
 │   │   │   ├── usb/            # USB camera implementation
 │   │   │   │   └── UsbCameraController.kt
@@ -159,7 +160,7 @@ MyNdiCam/
 | **Async** | Coroutines, StateFlow |
 | **Camera (Internal)** | CameraX (1.3.4) |
 | **Camera (USB)** | UVC via libausbc, libuvc |
-| **NDI** | Processing.NDI v6.3 (JNI) |
+| **NDI** | Processing.NDI v6.3 (JNI) with dynamic FPS support |
 | **Native** | C++17, CMake, NDK 27 |
 | **Build** | Gradle 8.6 (Kotlin DSL) |
 
@@ -167,20 +168,20 @@ MyNdiCam/
 
 **Internal Cameras (CameraX):**
 ```
-Camera → CameraX → YUV_420_888 → Frame Conversion → UYVY → NDI Sender → Network
-                                            ↓
-                                      NDI Tally (10Hz)
-                                            ↓
-                                      StateFlow → UI
+Camera → CameraX → YUV_420_888 → Frame Conversion → UYVY → NDI Sender (with dynamic FPS) → Network
+                                             ↓
+                                       NDI Tally (10Hz)
+                                             ↓
+                                       StateFlow → UI
 ```
 
 **USB Cameras (UVC):**
 ```
-USB Camera → libausbc → UVC Frame → Frame Conversion → UYVY → NDI Sender → Network
-                                            ↓
-                                      NDI Tally (10Hz)
-                                            ↓
-                                      StateFlow → UI
+USB Camera → libausbc → UVC Frame → Frame Conversion → UYVY → NDI Sender (with dynamic FPS) → Network
+                                             ↓
+                                       NDI Tally (10Hz)
+                                             ↓
+                                       StateFlow → UI
 ```
 
 **Frame Conversion Pipeline:**
@@ -280,9 +281,15 @@ The app supports UVC (USB Video Class) cameras:
 | Setting | Options | Location |
 |---------|---------|----------|
 | Camera | Front/Back/External | Menu (⋮) → Current Camera |
-| Frame Rate | 30/60 FPS | Menu (⋮) → Frame Rate |
+| Frame Rate | 30/60 FPS (dynamic NDI) | Menu (⋮) → Frame Rate |
 | Source Name | Custom text | Menu (⋮) → Source Name |
 | Screen Mode | Fit/Fill/Stretch | Menu (⋮) → Screen Mode |
+
+**Frame Rate Notes:**
+- 30 FPS: Uses NDI frame_rate 30000/1001 (29.97 fps NTSC standard)
+- 60 FPS: Uses NDI frame_rate 60000/1001 (59.94 fps NTSC standard)
+- Internal camera captures at 60 FPS, NDI sends at selected rate
+- Frame rate change recreates NDI sender for immediate OBS detection
 
 ### Tally Indicators
 
@@ -371,6 +378,15 @@ Native utilities library:
 - Disable firewall temporarily
 - Try mobile hotspot on Android device
 - Check router allows multicast traffic
+- Toggle streaming (stop/start) to force NDI sender recreation
+
+### Need to change resolution before OBS can connect
+
+**Fixed:** NDI sender now automatically recreates when you start streaming or change resolution. The issue was that the first frame sent to NDI determined the stream format. If this frame had inconsistent parameters, OBS couldn't detect the stream. Now the sender is recreated with a fresh state, ensuring the first frame sent has stable parameters.
+
+### Frame rate is always 30 FPS
+
+**Fixed:** Frame rate selection is now fully functional. Tap Menu (⋮) → Frame Rate to switch between 30 FPS and 60 FPS. The NDI sender dynamically adjusts to your selection (30000/1001 for 30 FPS, 60000/1001 for 60 FPS).
 
 ### Poor quality or lag
 
@@ -418,6 +434,13 @@ We welcome contributions! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for g
 - [ ] Advanced camera controls (exposure, focus, white balance)
 - [ ] Video codec selection (H.264, H.265)
 - [ ] Network bandwidth optimization
+
+### Recent Improvements
+
+- [x] Dynamic frame rate selection (30/60 FPS) - Users can now change NDI streaming FPS via UI menu
+- [x] Fixed NDI sender initialization - Stream now connects to OBS immediately without requiring resolution change
+- [x] Fixed FPS display - Shows actual calculated FPS instead of hardcoded 60 FPS
+- [x] Removed dead code - Deleted InternalCameraController.kt (unused duplicate logic)
 
 ## License
 
