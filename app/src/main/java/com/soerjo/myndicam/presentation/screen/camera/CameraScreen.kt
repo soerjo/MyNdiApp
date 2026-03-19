@@ -270,6 +270,7 @@ private fun InternalCameraContent(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showMenu by remember { mutableStateOf(false) }
+    var showZoomSlider by remember { mutableStateOf(false) }
     var showCameraSelector by remember { mutableStateOf(false) }
     var showResolutionSelector by remember { mutableStateOf(false) }
     var showFrameRateSelector by remember { mutableStateOf(false) }
@@ -335,7 +336,9 @@ private fun InternalCameraContent(
             },
             modifier = Modifier.fillMaxSize(),
             targetWidth = uiState.selectedResolution.width,
-            targetHeight = uiState.selectedResolution.height
+            targetHeight = uiState.selectedResolution.height,
+            showZoomSlider = showZoomSlider,
+            onZoomToggle = { showZoomSlider = !showZoomSlider }
         )
 
         TallyBorder(
@@ -363,18 +366,18 @@ private fun InternalCameraContent(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        CircularIconButton(
-            icon = androidx.compose.material.icons.Icons.Filled.Refresh,
-            onClick = {
-                val allCameras = viewModel.getAllCameras()
-                val currentIndex = allCameras.indexOf(uiState.selectedCamera)
-                if (allCameras.isNotEmpty()) {
-                    val nextIndex = (currentIndex + 1) % allCameras.size
-                    viewModel.selectCamera(allCameras[nextIndex])
-                }
-            },
-            modifier = Modifier.align(Alignment.BottomStart)
-        )
+//        CircularIconButton(
+//            icon = androidx.compose.material.icons.Icons.Filled.Refresh,
+//            onClick = {
+//                val allCameras = viewModel.getAllCameras()
+//                val currentIndex = allCameras.indexOf(uiState.selectedCamera)
+//                if (allCameras.isNotEmpty()) {
+//                    val nextIndex = (currentIndex + 1) % allCameras.size
+//                    viewModel.selectCamera(allCameras[nextIndex])
+//                }
+//            },
+//            modifier = Modifier.align(Alignment.BottomStart)
+//        )
 
         CircularIconButton(
             icon = Icons.Filled.MoreVert,

@@ -12,22 +12,34 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.soerjo.myndicam.presentation.screen.camera.components.controls.CircularIconButton
+import com.soerjo.myndicam.presentation.screen.camera.components.controls.ZoomSlider
 import com.soerjo.myndicam.presentation.screen.camera.model.FrameFormat
 import com.soerjo.myndicam.presentation.screen.camera.model.FrameInfo
 import com.soerjo.myndicam.presentation.screen.camera.model.YuvPlanes
 import com.soerjo.myndicam.presentation.screen.camera.model.YuvPlaneInfo
-import com.soerjo.myndicam.core.util.conversion.convertToUyvy
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalCamera2Interop::class)
@@ -38,12 +50,19 @@ fun InternalCameraPreview(
     onFrameData: (FrameInfo) -> Unit,
     modifier: Modifier = Modifier,
     targetWidth: Int = 1280,
-    targetHeight: Int = 720
+    targetHeight: Int = 720,
+    showZoomSlider: Boolean = true,
+    onZoomToggle: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val frameProcessingExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "NDI-Frame-Processor") } }
+
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var minZoom by remember { mutableFloatStateOf(1f) }
+    var maxZoom by remember { mutableFloatStateOf(1f) }
 
     var frameCount by remember { mutableIntStateOf(0) }
     var lastFpsTime by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -58,15 +77,43 @@ fun InternalCameraPreview(
         }
     }
 
-    AndroidView(
-        factory = { ctx ->
-            PreviewView(ctx).apply {
-                scaleType = PreviewView.ScaleType.FIT_CENTER
-                previewView = this
-            }
-        },
-        modifier = modifier
-    )
+    Box(modifier = modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { ctx ->
+                PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FIT_CENTER
+                    previewView = this
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (maxZoom > 1f && showZoomSlider && onZoomToggle != null) {
+            ZoomSlider(
+                zoomRatio = zoomRatio,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
+                onValueChange = { newZoom ->
+                    zoomRatio = newZoom
+                    camera?.cameraControl?.setZoomRatio(newZoom)
+                },
+                onClick = onZoomToggle,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp, start = 48.dp, end = 48.dp)
+            )
+        }
+
+        if (!showZoomSlider && onZoomToggle != null) {
+            CircularIconButton(
+                icon = Icons.Filled.Search,
+                onClick = onZoomToggle,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 48.dp, start = 48.dp)
+            )
+        }
+    }
 
     DisposableEffect(cameraSelector, targetWidth, targetHeight) {
         val selectedCamera = cameraSelector
@@ -162,7 +209,14 @@ fun InternalCameraPreview(
                 selectedCamera,
                 preview,
                 imageAnalysis
-            )
+            ).let { boundCamera ->
+                camera = boundCamera
+                boundCamera.cameraInfo.zoomState.value?.let { zoomState ->
+                    minZoom = zoomState.minZoomRatio
+                    maxZoom = zoomState.maxZoomRatio
+                    zoomRatio = zoomState.zoomRatio
+                }
+            }
 
             Log.d("InternalCameraPreview", "Camera bound successfully")
 
@@ -171,6 +225,7 @@ fun InternalCameraPreview(
         }
 
         onDispose {
+            camera = null
             try {
                 cameraProviderFuture.get().unbindAll()
             } catch (e: Exception) {
